@@ -68,12 +68,18 @@ impl Page {
     /// HINT: To convert a variable x to bytes using little endian, use
     /// x.to_le_bytes()
     pub fn new(page_id: PageId) -> Self {
-        panic!("TODO milestone pg");
+        // array of size 4kb
+        // serialize id to first four bytes 
+        let mut buff = [0u8; PAGE_SIZE];
+        let page_id_slice = &mut buff[0..PAGE_ID_SIZE];
+        page_id_slice.copy_from_slice(&page_id.to_le_bytes());
+        Page { data: buff }
+
     }
 
     /// Create a new empty page
     pub fn new_empty() -> Self {
-        panic!("TODO milestone pg");
+        Page::new(0)
     }
 
     /// Return the page id for a page
@@ -88,7 +94,7 @@ impl Page {
     /// Returns:
     /// * `PageId` - the page id
     pub fn get_page_id(&self) -> PageId {
-        panic!("TODO milestone pg");
+        PageId::from_le_bytes(self.data[0..PAGE_ID_SIZE].try_into().unwrap())
     }
 
     /// Set the page id for a page
@@ -103,7 +109,7 @@ impl Page {
     /// * `&self` - a mutable reference to the page
     /// * `page_id` - the page id to set
     pub fn set_page_id(&mut self, page_id: PageId) {
-        panic!("TODO milestone pg");
+        self.data[0..PAGE_ID_SIZE].copy_from_slice(&page_id.to_le_bytes());
     }
 
     /// Get the LSN for the page. The LSN is a log sequence number that is used to
@@ -117,7 +123,9 @@ impl Page {
     /// Returns:
     /// * `Lsn` - the LSN for the page
     pub fn get_lsn(&self) -> Lsn {
-        panic!("TODO milestone pg");
+        let page_id = PageId::from_le_bytes(self.data[LSN_PAGE_OFFSET..LSN_SLOT_OFFSET].try_into().unwrap());
+        let slot_id = SlotId::from_le_bytes(self.data[8..CHECKSUM_OFFSET].try_into().unwrap());
+        Lsn { page_id, slot_id }
     }
 
     /// Set the LSN for the page. The LSN is a log sequence number that is used to
@@ -131,7 +139,13 @@ impl Page {
     /// * `&self` - a mutable reference to the page
     /// * `lsn` - the LSN to set
     pub fn set_lsn(&mut self, lsn: Lsn) {
-        panic!("TODO milestone pg");
+        // set only if > LSN. when? 
+        // page_id updates or slot_idupdates
+        let current_lsn = self.get_lsn();
+        if lsn > current_lsn{
+            self.data[LSN_PAGE_OFFSET..LSN_SLOT_OFFSET].copy_from_slice(&lsn.page_id.to_le_bytes());
+            self.data[LSN_SLOT_OFFSET..CHECKSUM_OFFSET].copy_from_slice(&lsn.slot_id.to_le_bytes());
+        }
     }
 
     /// Get the checksum for the page. The checksum is used to verify the integrity of the page.
@@ -143,7 +157,7 @@ impl Page {
     /// Returns:
     /// * `CheckSum` - the checksum for the page
     pub fn get_checksum(&self) -> CheckSum {
-        panic!("TODO milestone pg");
+        CheckSum::from_le_bytes(self.data[CHECKSUM_OFFSET..CHECKSUM_OFFSET + CHECKSUM_SIZE].try_into().unwrap())
     }
 
     /// Set the checksum for the page. The checksum is used to verify the integrity of the page.
@@ -153,7 +167,16 @@ impl Page {
     /// Arguments:
     /// * `&self` - a mutable reference to the page
     pub fn set_checksum(&mut self) {
-        panic!("TODO milestone pg");
+        // set to zero
+        self.data[CHECKSUM_OFFSET..CHECKSUM_OFFSET + CHECKSUM_SIZE].copy_from_slice(&[0u8; CHECKSUM_SIZE]);
+        // hash entire page
+        let mut hasher = std::hash::DefaultHasher::new();
+        hasher.write(&self.data);
+        // cast to u16 
+        let checksum_64 = hasher.finish();
+        let checksum = (checksum_64 & 0xFFFF) as u16;
+        // write to buffer
+        self.data[CHECKSUM_OFFSET..CHECKSUM_OFFSET + CHECKSUM_SIZE].copy_from_slice(&checksum.to_le_bytes());
     }
 
     /// Create a page from a byte array
