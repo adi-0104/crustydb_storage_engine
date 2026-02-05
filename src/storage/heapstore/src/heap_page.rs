@@ -223,9 +223,52 @@ impl HeapPage for Page {
     }
 
     fn update_value(&mut self, slot_id: SlotId, bytes: &[u8]) -> Option<()> {
-        panic!("TODO milestone pg");
-    }
+        
+        let num_slots = self.get_num_slots();
+        // check validity 
+        if slot_id >= num_slots {
+            return None;
+        }
+        // cases: same size and different size (only larger?)
+        let new_byte_len = bytes.len();
+        let current_byte_len = self.get_slot_length(slot_id) as usize;
+        // check if value has already been deleted before update
+        if current_byte_len == 0 {
+            return None;
+        }
 
+        if new_byte_len <= current_byte_len {
+            // add value to that offset
+            let slot_offset = self.get_slot_offset(slot_id) as usize;
+            self.data[slot_offset..slot_offset + new_byte_len].copy_from_slice(bytes);
+            // update len if smaller
+            self.set_slot_metadata(slot_id, slot_offset as u16, new_byte_len as u16);
+            return Some(());
+        }
+
+        // else case new_byte_len > current_byte_len 
+        let required_space = new_byte_len - current_byte_len;
+        if required_space > self.get_free_space() {
+            return None;
+        }
+        // make slot available to edit
+        self.set_slot_metadata(slot_id, 0, 0);
+        // compact and then update to new loc ?
+        // when to compact? when contigous space isnt enough
+        let contiguous_space = self.get_free_ptr() - self.get_header_size() as u16;
+        if new_byte_len as u16 > contiguous_space {
+            self.compact();
+        }
+
+        // update at new loc
+        let free_ptr = self.get_free_ptr() as usize;
+        let new_offset = free_ptr - new_byte_len;
+        self.data[new_offset..free_ptr].copy_from_slice(bytes);
+        self.set_slot_metadata(slot_id, new_offset as u16, new_byte_len as u16);
+        self.set_free_ptr(new_offset as u16);
+        Some(())
+    }
+    
     #[allow(dead_code)]
     fn get_header_size(&self) -> usize {
         PAGE_FIXED_HEADER_LEN + HEAP_PAGE_FIXED_METADATA_SIZE + (SLOT_METADATA_SIZE * self.get_num_slots() as usize)
