@@ -20,7 +20,6 @@ pub(crate) const HEAP_PAGE_FIXED_METADATA_SIZE: usize = 8;
 pub const NUM_SLOTS_OFFSET: usize = PAGE_FIXED_HEADER_LEN;
 pub const FREE_PTR_OFFSET: usize = NUM_SLOTS_OFFSET + OFFSET_NUM_BYTES;
 
-
 /// This is trait of a HeapPage for the Page struct.
 ///
 /// The page header size is fixed to `PAGE_FIXED_HEADER_LEN` bytes and you will use
@@ -103,46 +102,69 @@ impl HeapPage for Page {
     fn init_heap_page(&mut self) {
         // heapmetadata: slot number and pointer to data
         let num_slots: u16 = 0;
-        self.data[NUM_SLOTS_OFFSET..NUM_SLOTS_OFFSET + OFFSET_NUM_BYTES].copy_from_slice(&num_slots.to_le_bytes());
+        self.data[NUM_SLOTS_OFFSET..NUM_SLOTS_OFFSET + OFFSET_NUM_BYTES]
+            .copy_from_slice(&num_slots.to_le_bytes());
         let free_pointer: u16 = PAGE_SIZE.try_into().unwrap();
-        self.data[FREE_PTR_OFFSET..FREE_PTR_OFFSET + OFFSET_NUM_BYTES].copy_from_slice(&free_pointer.to_le_bytes());
-
+        self.data[FREE_PTR_OFFSET..FREE_PTR_OFFSET + OFFSET_NUM_BYTES]
+            .copy_from_slice(&free_pointer.to_le_bytes());
     }
 
     fn get_num_slots(&self) -> u16 {
-        u16::from_le_bytes(self.data[NUM_SLOTS_OFFSET..NUM_SLOTS_OFFSET + OFFSET_NUM_BYTES].try_into().unwrap())
+        u16::from_le_bytes(
+            self.data[NUM_SLOTS_OFFSET..NUM_SLOTS_OFFSET + OFFSET_NUM_BYTES]
+                .try_into()
+                .unwrap(),
+        )
     }
-    
+
     fn set_num_slots(&mut self, n: u16) {
-        self.data[NUM_SLOTS_OFFSET..NUM_SLOTS_OFFSET + OFFSET_NUM_BYTES].copy_from_slice(&n.to_le_bytes());
+        self.data[NUM_SLOTS_OFFSET..NUM_SLOTS_OFFSET + OFFSET_NUM_BYTES]
+            .copy_from_slice(&n.to_le_bytes());
     }
-    
+
     fn get_free_ptr(&self) -> u16 {
-        u16::from_le_bytes(self.data[FREE_PTR_OFFSET..FREE_PTR_OFFSET + OFFSET_NUM_BYTES].try_into().unwrap())
+        u16::from_le_bytes(
+            self.data[FREE_PTR_OFFSET..FREE_PTR_OFFSET + OFFSET_NUM_BYTES]
+                .try_into()
+                .unwrap(),
+        )
     }
     fn set_free_ptr(&mut self, ptr: u16) {
-        self.data[FREE_PTR_OFFSET..FREE_PTR_OFFSET + OFFSET_NUM_BYTES].copy_from_slice(&ptr.to_le_bytes());
+        self.data[FREE_PTR_OFFSET..FREE_PTR_OFFSET + OFFSET_NUM_BYTES]
+            .copy_from_slice(&ptr.to_le_bytes());
     }
-    
+
     fn get_slot_offset(&self, slot_id: SlotId) -> u16 {
-        let slot_meta_start = PAGE_FIXED_HEADER_LEN + HEAP_PAGE_FIXED_METADATA_SIZE 
-                            + (slot_id as usize * SLOT_METADATA_SIZE);
-        u16::from_le_bytes(self.data[slot_meta_start..slot_meta_start + OFFSET_NUM_BYTES].try_into().unwrap())
+        let slot_meta_start = PAGE_FIXED_HEADER_LEN
+            + HEAP_PAGE_FIXED_METADATA_SIZE
+            + (slot_id as usize * SLOT_METADATA_SIZE);
+        u16::from_le_bytes(
+            self.data[slot_meta_start..slot_meta_start + OFFSET_NUM_BYTES]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     fn get_slot_length(&self, slot_id: SlotId) -> u16 {
-        let slot_meta_start = PAGE_FIXED_HEADER_LEN + HEAP_PAGE_FIXED_METADATA_SIZE 
-                            + (slot_id as usize * SLOT_METADATA_SIZE);
-        u16::from_le_bytes(self.data[slot_meta_start + OFFSET_NUM_BYTES..slot_meta_start + SLOT_METADATA_SIZE].try_into().unwrap())
+        let slot_meta_start = PAGE_FIXED_HEADER_LEN
+            + HEAP_PAGE_FIXED_METADATA_SIZE
+            + (slot_id as usize * SLOT_METADATA_SIZE);
+        u16::from_le_bytes(
+            self.data[slot_meta_start + OFFSET_NUM_BYTES..slot_meta_start + SLOT_METADATA_SIZE]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     fn set_slot_metadata(&mut self, slot_id: SlotId, offset: u16, length: u16) {
-        let slot_meta_start = PAGE_FIXED_HEADER_LEN + HEAP_PAGE_FIXED_METADATA_SIZE 
-                            + (slot_id as usize * SLOT_METADATA_SIZE);
-        self.data[slot_meta_start..slot_meta_start + OFFSET_NUM_BYTES].copy_from_slice(&offset.to_le_bytes());
-        self.data[slot_meta_start + OFFSET_NUM_BYTES..slot_meta_start + SLOT_METADATA_SIZE].copy_from_slice(&length.to_le_bytes());
+        let slot_meta_start = PAGE_FIXED_HEADER_LEN
+            + HEAP_PAGE_FIXED_METADATA_SIZE
+            + (slot_id as usize * SLOT_METADATA_SIZE);
+        self.data[slot_meta_start..slot_meta_start + OFFSET_NUM_BYTES]
+            .copy_from_slice(&offset.to_le_bytes());
+        self.data[slot_meta_start + OFFSET_NUM_BYTES..slot_meta_start + SLOT_METADATA_SIZE]
+            .copy_from_slice(&length.to_le_bytes());
     }
-
 
     fn add_value(&mut self, bytes: &[u8]) -> Option<SlotId> {
         let data_len = bytes.len();
@@ -151,7 +173,7 @@ impl HeapPage for Page {
         let mut slot_id: Option<SlotId> = None;
         let mut new_slot_flag = true;
 
-        for i in 0..num_slots{
+        for i in 0..num_slots {
             if self.get_slot_length(i) == 0 {
                 slot_id = Some(i);
                 new_slot_flag = false;
@@ -160,17 +182,19 @@ impl HeapPage for Page {
         }
         // move to last slot if no free slot
         let slot_id = slot_id.unwrap_or(num_slots);
-        
+
         // check space availability
-        let bytes_needed = data_len + if new_slot_flag {SLOT_METADATA_SIZE} else {0};
+        let bytes_needed = data_len + if new_slot_flag { SLOT_METADATA_SIZE } else { 0 };
         if bytes_needed > self.get_free_space() {
             return None;
         }
 
         // check compaction possible
-        let free_space = self.get_free_ptr() as usize - self.get_header_size() - if new_slot_flag {SLOT_METADATA_SIZE} else {0};
+        let free_space = self.get_free_ptr() as usize
+            - self.get_header_size()
+            - if new_slot_flag { SLOT_METADATA_SIZE } else { 0 };
 
-        if data_len > free_space{
+        if data_len > free_space {
             self.compact();
         }
         let free_ptr = self.get_free_ptr() as usize;
@@ -186,12 +210,11 @@ impl HeapPage for Page {
         }
 
         Some(slot_id)
-
     }
 
     fn get_value(&self, slot_id: SlotId) -> Option<&[u8]> {
         let num_slots = self.get_num_slots();
-        // check validity 
+        // check validity
         if slot_id >= num_slots {
             return None;
         }
@@ -200,18 +223,17 @@ impl HeapPage for Page {
         let slot_offset = self.get_slot_offset(slot_id) as usize;
         let slot_length = self.get_slot_length(slot_id) as usize;
 
-        if slot_length == 0{
+        if slot_length == 0 {
             return None;
         }
 
         Some(&self.data[slot_offset..slot_offset + slot_length])
-
     }
 
     fn delete_value(&mut self, slot_id: SlotId) -> Option<()> {
         // use compaction logic
         let num_slots = self.get_num_slots();
-        // check validity 
+        // check validity
         if slot_id >= num_slots || self.get_slot_length(slot_id) == 0 {
             return None;
         }
@@ -223,9 +245,8 @@ impl HeapPage for Page {
     }
 
     fn update_value(&mut self, slot_id: SlotId, bytes: &[u8]) -> Option<()> {
-        
         let num_slots = self.get_num_slots();
-        // check validity 
+        // check validity
         if slot_id >= num_slots {
             return None;
         }
@@ -246,7 +267,7 @@ impl HeapPage for Page {
             return Some(());
         }
 
-        // else case new_byte_len > current_byte_len 
+        // else case new_byte_len > current_byte_len
         let required_space = new_byte_len - current_byte_len;
         if required_space > self.get_free_space() {
             return None;
@@ -268,10 +289,12 @@ impl HeapPage for Page {
         self.set_free_ptr(new_offset as u16);
         Some(())
     }
-    
+
     #[allow(dead_code)]
     fn get_header_size(&self) -> usize {
-        PAGE_FIXED_HEADER_LEN + HEAP_PAGE_FIXED_METADATA_SIZE + (SLOT_METADATA_SIZE * self.get_num_slots() as usize)
+        PAGE_FIXED_HEADER_LEN
+            + HEAP_PAGE_FIXED_METADATA_SIZE
+            + (SLOT_METADATA_SIZE * self.get_num_slots() as usize)
     }
 
     #[allow(dead_code)]
@@ -288,7 +311,7 @@ impl HeapPage for Page {
     fn iter(&self) -> HeapPageIter<'_> {
         HeapPageIter {
             page: self,
-            current_slot: 0
+            current_slot: 0,
         }
     }
 
@@ -296,14 +319,14 @@ impl HeapPage for Page {
         let mut entries: Vec<(SlotId, Vec<u8>)> = Vec::new();
         // collect all data present in page
         for slot_id in 0..self.get_num_slots() {
-            if let Some(data) = self.get_value(slot_id){
+            if let Some(data) = self.get_value(slot_id) {
                 entries.push((slot_id, data.to_vec()));
             }
         }
 
         // Rewrite bottom up
         let mut free_ptr = PAGE_SIZE;
-        for (slot_id, current_value) in entries{
+        for (slot_id, current_value) in entries {
             let value_len = current_value.len();
             free_ptr -= value_len;
             self.data[free_ptr..free_ptr + value_len].copy_from_slice(&current_value);
@@ -311,13 +334,12 @@ impl HeapPage for Page {
         }
 
         self.set_free_ptr(free_ptr as u16);
-
     }
 }
 
 pub struct HeapPageIter<'a> {
     page: &'a Page,
-    current_slot: SlotId
+    current_slot: SlotId,
 }
 
 impl<'a> Iterator for HeapPageIter<'a> {
@@ -332,7 +354,7 @@ impl<'a> Iterator for HeapPageIter<'a> {
             let slot_id = self.current_slot;
             self.current_slot += 1;
 
-            if let Some(value) = self.page.get_value(slot_id){
+            if let Some(value) = self.page.get_value(slot_id) {
                 return Some((value, slot_id));
             }
         }
@@ -350,7 +372,7 @@ impl<'a> IntoIterator for &'a Page {
     fn into_iter(self) -> Self::IntoIter {
         HeapPageIter {
             page: self,
-            current_slot: 0
+            current_slot: 0,
         }
     }
 }
