@@ -44,6 +44,7 @@ pub trait HeapPage {
     fn set_slot_metadata(&mut self, slot_id: SlotId, offset: u16, length: u16);
     fn get_slot_offset(&self, slot_id: SlotId) -> u16;
     fn get_slot_length(&self, slot_id: SlotId) -> u16;
+    fn compact(&mut self);
 
     // Do not change these functions signatures (only the function bodies)
 
@@ -240,6 +241,28 @@ impl HeapPage for Page {
             //TODO milestone pg
             //Initialize with added variables here
         }
+    }
+
+    fn compact(&mut self) {
+        let mut entries: Vec<(SlotId, Vec<u8>)> = Vec::new();
+        // collect all data present in page
+        for slot_id in 0..self.get_num_slots() {
+            if let Some(data) = self.get_value(slot_id){
+                entries.push((slot_id, data.to_vec()));
+            }
+        }
+
+        // Rewrite bottom up
+        let mut free_ptr = PAGE_SIZE;
+        for (slot_id, current_value) in entries{
+            let value_len = current_value.len();
+            free_ptr -= value_len;
+            self.data[free_ptr..free_ptr + value_len].copy_from_slice(&current_value);
+            self.set_slot_metadata(slot_id, free_ptr as u16, value_len as u16);
+        }
+
+        self.set_free_ptr(free_ptr as u16);
+
     }
 }
 
