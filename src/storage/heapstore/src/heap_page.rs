@@ -2,6 +2,7 @@ use common::prelude::*;
 #[allow(unused_imports)]
 use common::PAGE_SIZE;
 
+use crate::page::PAGE_FIXED_HEADER_LEN;
 #[allow(unused_imports)]
 use crate::page::{Offset, Page, OFFSET_NUM_BYTES};
 
@@ -16,6 +17,9 @@ pub(crate) const SLOT_METADATA_SIZE: usize = 4;
 #[allow(dead_code)]
 /// The size of the metadata allowed for the heap page, this is in addition to the page header
 pub(crate) const HEAP_PAGE_FIXED_METADATA_SIZE: usize = 8;
+pub const NUM_SLOTS_OFFSET: usize = PAGE_FIXED_HEADER_LEN;
+pub const FREE_PTR_OFFSET: usize = NUM_SLOTS_OFFSET + OFFSET_NUM_BYTES;
+
 
 /// This is trait of a HeapPage for the Page struct.
 ///
@@ -32,7 +36,14 @@ pub(crate) const HEAP_PAGE_FIXED_METADATA_SIZE: usize = 8;
 /// bytes & subsequent inserts can simply add 6 more bytes to the header as normal.
 /// The rest must filled as much as possible to hold values.
 pub trait HeapPage {
-    // Add any new functions here
+    // get/set function for heap file and slot metadata
+    fn get_num_slots(&self) -> u16;
+    fn set_num_slots(&mut self, n: u16);
+    fn get_free_ptr(&self) -> u16;
+    fn set_free_ptr(&mut self, ptr: u16);
+    fn set_slot_metadata(&mut self, slot_id: SlotId, offset: u16, length: u16);
+    fn get_slot_offset(&self, slot_id: SlotId) -> u16;
+    fn get_slot_length(&self, slot_id: SlotId) -> u16;
 
     // Do not change these functions signatures (only the function bodies)
 
@@ -89,20 +100,118 @@ pub trait HeapPage {
 
 impl HeapPage for Page {
     fn init_heap_page(&mut self) {
-        //TODO milestone pg
-        //Add any initialization code here
+        // heapmetadata: slot number and pointer to data
+        let num_slots: u16 = 0;
+        self.data[NUM_SLOTS_OFFSET..NUM_SLOTS_OFFSET + OFFSET_NUM_BYTES].copy_from_slice(&num_slots.to_le_bytes());
+        let free_pointer: u16 = PAGE_SIZE.try_into().unwrap();
+        self.data[FREE_PTR_OFFSET..FREE_PTR_OFFSET + OFFSET_NUM_BYTES].copy_from_slice(&free_pointer.to_le_bytes());
+
     }
 
+    fn get_num_slots(&self) -> u16 {
+        u16::from_le_bytes(self.data[NUM_SLOTS_OFFSET..NUM_SLOTS_OFFSET + OFFSET_NUM_BYTES].try_into().unwrap())
+    }
+    
+    fn set_num_slots(&mut self, n: u16) {
+        self.data[NUM_SLOTS_OFFSET..NUM_SLOTS_OFFSET + OFFSET_NUM_BYTES].copy_from_slice(&n.to_le_bytes());
+    }
+    
+    fn get_free_ptr(&self) -> u16 {
+        u16::from_le_bytes(self.data[FREE_PTR_OFFSET..FREE_PTR_OFFSET + OFFSET_NUM_BYTES].try_into().unwrap())
+    }
+    fn set_free_ptr(&mut self, ptr: u16) {
+        self.data[FREE_PTR_OFFSET..FREE_PTR_OFFSET + OFFSET_NUM_BYTES].copy_from_slice(&ptr.to_le_bytes());
+    }
+    
+    fn get_slot_offset(&self, slot_id: SlotId) -> u16 {
+        let slot_meta_start = PAGE_FIXED_HEADER_LEN + HEAP_PAGE_FIXED_METADATA_SIZE 
+                            + (slot_id as usize * SLOT_METADATA_SIZE);
+        u16::from_le_bytes(self.data[slot_meta_start..slot_meta_start + OFFSET_NUM_BYTES].try_into().unwrap())
+    }
+
+    fn get_slot_length(&self, slot_id: SlotId) -> u16 {
+        let slot_meta_start = PAGE_FIXED_HEADER_LEN + HEAP_PAGE_FIXED_METADATA_SIZE 
+                            + (slot_id as usize * SLOT_METADATA_SIZE);
+        u16::from_le_bytes(self.data[slot_meta_start + OFFSET_NUM_BYTES..slot_meta_start + SLOT_METADATA_SIZE].try_into().unwrap())
+    }
+
+    fn set_slot_metadata(&mut self, slot_id: SlotId, offset: u16, length: u16) {
+        let slot_meta_start = PAGE_FIXED_HEADER_LEN + HEAP_PAGE_FIXED_METADATA_SIZE 
+                            + (slot_id as usize * SLOT_METADATA_SIZE);
+        self.data[slot_meta_start..slot_meta_start + OFFSET_NUM_BYTES].copy_from_slice(&offset.to_le_bytes());
+        self.data[slot_meta_start + OFFSET_NUM_BYTES..slot_meta_start + SLOT_METADATA_SIZE].copy_from_slice(&length.to_le_bytes());
+    }
+
+
     fn add_value(&mut self, bytes: &[u8]) -> Option<SlotId> {
-        panic!("TODO milestone pg");
+        let data_len = bytes.len();
+
+        let num_slots = self.get_num_slots();
+        let mut slot_id: Option<SlotId> = None;
+        let mut new_slot_flag = true;
+
+        for i in 0..num_slots{
+            if self.get_slot_length(i) == 0 {
+                slot_id = Some(i);
+                new_slot_flag = false;
+                break;
+            }
+        }
+        // move to last slot if no free slot
+        let slot_id = slot_id.unwrap_or(num_slots);
+        
+        // check space availability
+        let bytes_needed = data_len + if new_slot_flag {SLOT_METADATA_SIZE} else {0};
+        if bytes_needed > self.get_free_space() {
+            return None;
+        }
+        let free_ptr = self.get_free_ptr() as usize;
+        let new_free_ptr = free_ptr - data_len;
+        self.data[new_free_ptr..free_ptr].clone_from_slice(bytes);
+
+        // slot metadata
+        self.set_free_ptr(new_free_ptr as u16);
+        self.set_slot_metadata(slot_id, new_free_ptr as u16, data_len as u16);
+
+        if new_slot_flag {
+            self.set_num_slots(num_slots + 1);
+        }
+
+        Some(slot_id)
+
     }
 
     fn get_value(&self, slot_id: SlotId) -> Option<&[u8]> {
-        panic!("TODO milestone pg");
+        let num_slots = self.get_num_slots();
+        // check validity 
+        if slot_id >= num_slots {
+            return None;
+        }
+
+        // check if deleted slot
+        let slot_offset = self.get_slot_offset(slot_id) as usize;
+        let slot_length = self.get_slot_length(slot_id) as usize;
+
+        if slot_length == 0{
+            return None;
+        }
+
+        Some(&self.data[slot_offset..slot_offset + slot_length])
+
     }
 
     fn delete_value(&mut self, slot_id: SlotId) -> Option<()> {
-        panic!("TODO milestone pg");
+        // use compaction logic
+        let num_slots = self.get_num_slots();
+        // check validity 
+        if slot_id >= num_slots || self.get_slot_length(slot_id) == 0 {
+            return None;
+        }
+
+        // set slot metadata to zero
+        self.set_slot_metadata(slot_id, 0, 0);
+
+        Some(())
     }
 
     fn update_value(&mut self, slot_id: SlotId, bytes: &[u8]) -> Option<()> {
@@ -111,12 +220,16 @@ impl HeapPage for Page {
 
     #[allow(dead_code)]
     fn get_header_size(&self) -> usize {
-        panic!("TODO milestone pg");
+        PAGE_FIXED_HEADER_LEN + HEAP_PAGE_FIXED_METADATA_SIZE + (SLOT_METADATA_SIZE * self.get_num_slots() as usize)
     }
 
     #[allow(dead_code)]
     fn get_free_space(&self) -> usize {
-        panic!("TODO milestone pg");
+        // ptr - headers
+        self.get_free_ptr() as usize - self.get_header_size()
+
+        // TODO: check if header space overflows to data space handling
+        // saturating_sub
     }
 
     fn iter(&self) -> HeapPageIter<'_> {
