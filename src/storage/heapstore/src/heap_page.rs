@@ -350,8 +350,7 @@ impl<'a> IntoIterator for &'a Page {
     fn into_iter(self) -> Self::IntoIter {
         HeapPageIter {
             page: self,
-            //TODO milestone pg
-            //Initialize with added variables here
+            current_slot: 0
         }
     }
 }
