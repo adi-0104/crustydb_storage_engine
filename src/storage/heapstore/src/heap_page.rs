@@ -225,11 +225,13 @@ impl HeapPage for Page {
 
     #[allow(dead_code)]
     fn get_free_space(&self) -> usize {
-        // ptr - headers
-        self.get_free_ptr() as usize - self.get_header_size()
+        let mut data_bytes = 0;
 
-        // TODO: check if header space overflows to data space handling
-        // saturating_sub
+        for slot_id in 0..self.get_num_slots() {
+            data_bytes += self.get_slot_length(slot_id)
+        }
+
+        PAGE_SIZE - self.get_header_size() - data_bytes as usize
     }
 
     fn iter(&self) -> HeapPageIter<'_> {
