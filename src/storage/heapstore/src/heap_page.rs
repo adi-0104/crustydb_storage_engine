@@ -166,6 +166,13 @@ impl HeapPage for Page {
         if bytes_needed > self.get_free_space() {
             return None;
         }
+
+        // check compaction possible
+        let free_space = self.get_free_ptr() as usize - self.get_header_size() - if new_slot_flag {SLOT_METADATA_SIZE} else {0};
+
+        if data_len > free_space{
+            self.compact();
+        }
         let free_ptr = self.get_free_ptr() as usize;
         let new_free_ptr = free_ptr - data_len;
         self.data[new_free_ptr..free_ptr].clone_from_slice(bytes);
