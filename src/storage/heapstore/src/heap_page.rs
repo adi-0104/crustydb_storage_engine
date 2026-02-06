@@ -17,7 +17,9 @@ pub(crate) const SLOT_METADATA_SIZE: usize = 4;
 #[allow(dead_code)]
 /// The size of the metadata allowed for the heap page, this is in addition to the page header
 pub(crate) const HEAP_PAGE_FIXED_METADATA_SIZE: usize = 8;
+/// Offset in page where num_slots is stored
 pub const NUM_SLOTS_OFFSET: usize = PAGE_FIXED_HEADER_LEN;
+/// Offset in page where free_ptr is stored
 pub const FREE_PTR_OFFSET: usize = NUM_SLOTS_OFFSET + OFFSET_NUM_BYTES;
 
 /// This is trait of a HeapPage for the Page struct.
@@ -35,16 +37,18 @@ pub const FREE_PTR_OFFSET: usize = NUM_SLOTS_OFFSET + OFFSET_NUM_BYTES;
 /// bytes & subsequent inserts can simply add 6 more bytes to the header as normal.
 /// The rest must filled as much as possible to hold values.
 pub trait HeapPage {
-    // get/set function for heap file and slot metadata
-    fn get_num_slots(&self) -> u16;
+    // Helper functions to get(deserialise) and set(serialise) metadata values in page data for heap metadata and slot metadata
+    fn get_num_slots(&self) -> Offset;
     fn set_num_slots(&mut self, n: u16);
-    fn get_free_ptr(&self) -> u16;
+    fn get_free_ptr(&self) -> Offset;
     fn set_free_ptr(&mut self, ptr: u16);
-    fn set_slot_metadata(&mut self, slot_id: SlotId, offset: u16, length: u16);
-    fn get_slot_offset(&self, slot_id: SlotId) -> u16;
-    fn get_slot_length(&self, slot_id: SlotId) -> u16;
+    fn set_slot_metadata(&mut self, slot_id: SlotId, offset: Offset, length: Offset);
+    fn get_slot_offset(&self, slot_id: SlotId) -> Offset;
+    fn get_slot_length(&self, slot_id: SlotId) -> Offset;
     fn set_total_bytes(&mut self, bytes: u16);
-    fn get_total_bytes(&self) -> u16;
+    fn get_total_bytes(&self) -> Offset;
+
+    /// Compacts the page by moving all valid data to be contiguous at the bottom
     fn compact(&mut self);
 
     // Do not change these functions signatures (only the function bodies)
@@ -311,7 +315,7 @@ impl HeapPage for Page {
         self.data[new_offset..free_ptr].copy_from_slice(bytes);
         self.set_slot_metadata(slot_id, new_offset as u16, new_byte_len as u16);
         self.set_free_ptr(new_offset as u16);
-        // upadte total_bytes
+        // update total_bytes
         self.set_total_bytes(
             ((self.get_total_bytes() as usize) - current_byte_len + new_byte_len) as u16,
         );

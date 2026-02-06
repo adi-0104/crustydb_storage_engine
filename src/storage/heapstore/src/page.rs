@@ -127,7 +127,11 @@ impl Page {
                 .try_into()
                 .unwrap(),
         );
-        let slot_id = SlotId::from_le_bytes(self.data[8..CHECKSUM_OFFSET].try_into().unwrap());
+        let slot_id = SlotId::from_le_bytes(
+            self.data[LSN_SLOT_OFFSET..CHECKSUM_OFFSET]
+                .try_into()
+                .unwrap(),
+        );
         Lsn { page_id, slot_id }
     }
 

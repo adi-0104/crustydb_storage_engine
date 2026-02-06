@@ -19,7 +19,7 @@ Took about 15-18 hrs over 3 days to complete this. Major time went in trying to 
 I was able to strongly understand and implement the page architecture and how rust serialzes/deserializes the data. Still a little bit confused with the implementation of my iter traits.
 
 Somethings i would do better in code:
-1. if i had more time is probably find a better way to write my helper functions instead of having different getter and setter for all the metadata im tracking. Maybe a simple dictionary or map that tracks all the metadata in its deserialized form or just pair the getset methods for each of the properties.
+1. If I had more time, I’d probably refactor these helper functions. Instead of having separate getters and setters for every piece of metadata, I’d use a simple dictionary to track everything in its deserialized form, or at least pair the methods for each property.
 2. Use the debugging options and learn how to use the profiler to optimise my code, was only able to use the logging and debugging tools towards the end. 
 
 
