@@ -190,9 +190,10 @@ impl HeapPage for Page {
         }
 
         // check compaction possible
-        let free_space = self.get_free_ptr() as usize
-            - self.get_header_size()
-            - if new_slot_flag { SLOT_METADATA_SIZE } else { 0 };
+        // note: handle underflow case for when headersize and free ptr are very close - 
+        let free_space = (self.get_free_ptr() as usize)
+            .saturating_sub(self.get_header_size())
+            .saturating_sub(if new_slot_flag { SLOT_METADATA_SIZE } else { 0 });
 
         if data_len > free_space {
             self.compact();
