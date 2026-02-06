@@ -43,6 +43,8 @@ pub trait HeapPage {
     fn set_slot_metadata(&mut self, slot_id: SlotId, offset: u16, length: u16);
     fn get_slot_offset(&self, slot_id: SlotId) -> u16;
     fn get_slot_length(&self, slot_id: SlotId) -> u16;
+    fn set_total_bytes(&mut self, bytes: u16);
+    fn get_total_bytes(&self) -> u16;
     fn compact(&mut self);
 
     // Do not change these functions signatures (only the function bodies)
@@ -107,6 +109,9 @@ impl HeapPage for Page {
         let free_pointer: u16 = PAGE_SIZE.try_into().unwrap();
         self.data[FREE_PTR_OFFSET..FREE_PTR_OFFSET + OFFSET_NUM_BYTES]
             .copy_from_slice(&free_pointer.to_le_bytes());
+        let total_bytes: u16 = 0;
+        self.data[FREE_PTR_OFFSET + OFFSET_NUM_BYTES..FREE_PTR_OFFSET + (2 * OFFSET_NUM_BYTES)]
+            .copy_from_slice(&total_bytes.to_le_bytes());
     }
 
     fn get_num_slots(&self) -> u16 {
@@ -129,9 +134,20 @@ impl HeapPage for Page {
                 .unwrap(),
         )
     }
+    fn get_total_bytes(&self) -> u16 {
+        u16::from_le_bytes(
+            self.data[FREE_PTR_OFFSET + OFFSET_NUM_BYTES..FREE_PTR_OFFSET + (2 * OFFSET_NUM_BYTES)]
+                .try_into()
+                .unwrap(),
+        )
+    }
     fn set_free_ptr(&mut self, ptr: u16) {
         self.data[FREE_PTR_OFFSET..FREE_PTR_OFFSET + OFFSET_NUM_BYTES]
             .copy_from_slice(&ptr.to_le_bytes());
+    }
+    fn set_total_bytes(&mut self, bytes: u16) {
+        self.data[FREE_PTR_OFFSET + OFFSET_NUM_BYTES..FREE_PTR_OFFSET + (2 * OFFSET_NUM_BYTES)]
+            .copy_from_slice(&bytes.to_le_bytes());
     }
 
     fn get_slot_offset(&self, slot_id: SlotId) -> u16 {
@@ -190,7 +206,7 @@ impl HeapPage for Page {
         }
 
         // check compaction possible
-        // note: handle underflow case for when headersize and free ptr are very close - 
+        // note: handle underflow case for when headersize and free ptr are very close - saturating_sub
         let free_space = (self.get_free_ptr() as usize)
             .saturating_sub(self.get_header_size())
             .saturating_sub(if new_slot_flag { SLOT_METADATA_SIZE } else { 0 });
@@ -205,6 +221,8 @@ impl HeapPage for Page {
         // slot metadata
         self.set_free_ptr(new_free_ptr as u16);
         self.set_slot_metadata(slot_id, new_free_ptr as u16, data_len as u16);
+        // update total data bytes
+        self.set_total_bytes(self.get_total_bytes() + data_len as u16);
 
         if new_slot_flag {
             self.set_num_slots(num_slots + 1);
@@ -238,7 +256,8 @@ impl HeapPage for Page {
         if slot_id >= num_slots || self.get_slot_length(slot_id) == 0 {
             return None;
         }
-
+        // update total bytes
+        self.set_total_bytes(self.get_total_bytes() - self.get_slot_length(slot_id));
         // set slot metadata to zero
         self.set_slot_metadata(slot_id, 0, 0);
 
@@ -265,6 +284,10 @@ impl HeapPage for Page {
             self.data[slot_offset..slot_offset + new_byte_len].copy_from_slice(bytes);
             // update len if smaller
             self.set_slot_metadata(slot_id, slot_offset as u16, new_byte_len as u16);
+            // update total_bytes
+            self.set_total_bytes(
+                ((self.get_total_bytes() as usize) - current_byte_len + new_byte_len) as u16,
+            );
             return Some(());
         }
 
@@ -275,8 +298,8 @@ impl HeapPage for Page {
         }
         // make slot available to edit
         self.set_slot_metadata(slot_id, 0, 0);
-        // compact and then update to new loc ?
-        // when to compact? when contigous space isnt enough
+
+        // compact when contigous space isnt enough
         let contiguous_space = self.get_free_ptr() - self.get_header_size() as u16;
         if new_byte_len as u16 > contiguous_space {
             self.compact();
@@ -288,6 +311,10 @@ impl HeapPage for Page {
         self.data[new_offset..free_ptr].copy_from_slice(bytes);
         self.set_slot_metadata(slot_id, new_offset as u16, new_byte_len as u16);
         self.set_free_ptr(new_offset as u16);
+        // upadte total_bytes
+        self.set_total_bytes(
+            ((self.get_total_bytes() as usize) - current_byte_len + new_byte_len) as u16,
+        );
         Some(())
     }
 
@@ -300,13 +327,13 @@ impl HeapPage for Page {
 
     #[allow(dead_code)]
     fn get_free_space(&self) -> usize {
-        let mut data_bytes = 0;
+        // let mut data_bytes = 0;
 
-        for slot_id in 0..self.get_num_slots() {
-            data_bytes += self.get_slot_length(slot_id)
-        }
+        // for slot_id in 0..self.get_num_slots() {
+        //     data_bytes += self.get_slot_length(slot_id)
+        // }
 
-        PAGE_SIZE - self.get_header_size() - data_bytes as usize
+        PAGE_SIZE - self.get_header_size() - self.get_total_bytes() as usize
     }
 
     fn iter(&self) -> HeapPageIter<'_> {
