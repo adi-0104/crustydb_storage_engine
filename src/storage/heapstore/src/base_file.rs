@@ -106,8 +106,11 @@ impl BaseFileTrait for BaseFile {
             //
             // HINT to cast the page to a mutable pointer use:
             // page.to_bytes_mut().as_mut_ptr() as *mut c_void
+            let read_bytes = libc::pread(self.file_no, page.to_bytes_mut().as_mut_ptr() as *mut c_void,PAGE_SIZE, page_id as i64 * PAGE_SIZE as i64);
 
-            panic!("TODO milestone hs");
+            if read_bytes != PAGE_SIZE as isize {
+                return Err(std::io::Error::last_os_error());
+            }
         }
         debug_assert!(page.get_page_id() == page_id, "Page id mismatch");
         Ok(())
@@ -128,7 +131,11 @@ impl BaseFileTrait for BaseFile {
             //
             // HINT to cast the page to a pointer use:
             // page.to_bytes().as_ptr() as *const c_void
-            panic!("TODO milestone hs");
+            let write_bytes = libc::pwrite(self.file_no, page.to_bytes().as_ptr() as *const c_void,PAGE_SIZE, page_id as i64 * PAGE_SIZE as i64);
+
+            if write_bytes != PAGE_SIZE as isize {
+                return Err(std::io::Error::last_os_error());
+            }
         }
         Ok(())
     }
