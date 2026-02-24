@@ -33,6 +33,16 @@ impl<T: MemPool> HeapFile<T> {
             .unwrap()
     }
 
+    // helper
+    fn check_page_id(&self, page_id: PageId) -> Result<(), CrustyError> {
+        if page_id >= self.num_pages() {
+            Err(CrustyError::CrustyError(format!("page id {} out of bounds", page_id)))
+        } else {
+            Ok(())
+        }
+    }
+
+
     /// Create a brand-new heap file for container `c_id`.
     pub fn new(c_id: ContainerId, mem_pool: Arc<T>) -> Result<Self, CrustyError> {
         // Note that the header page is always page 0, and the data pages start from 1.
@@ -73,6 +83,8 @@ impl<T: MemPool> HeapFile<T> {
 
     /// Read a value at (page_id, slot_id) from the heap file.
     pub fn get_val(&self, page_id: PageId, slot_id: SlotId) -> Result<Vec<u8>, CrustyError> {
+        // check for valid page
+        self.check_page_id(page_id)?;
         let page = self.get_page_for_read(page_id);
         match page.get_value(slot_id) {
             Some(slice) => Ok(slice.to_vec()),
@@ -82,6 +94,7 @@ impl<T: MemPool> HeapFile<T> {
 
     // Delete a value at (page_id, slot_id) from the heap file.
     pub fn delete_val(&self, page_id: PageId, slot_id: SlotId) -> Result<(), CrustyError> {
+        self.check_page_id(page_id)?;
         let mut page = self.get_page_for_write(page_id);
         match page.delete_value(slot_id) {
             Some(()) => Ok(()),
@@ -95,6 +108,7 @@ impl<T: MemPool> HeapFile<T> {
         slot_id: SlotId,
         val: &[u8],
     ) -> Result<ValueId, CrustyError> {
+        self.check_page_id(page_id)?;
         let mut page = self.get_page_for_write(page_id);
         match page.update_value(slot_id, val) {
             Some(()) => Ok(ValueId { container_id: self.c_id, segment_id: None,page_id: Some(page_id), slot_id: Some(slot_id) }),
