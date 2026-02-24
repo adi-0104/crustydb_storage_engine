@@ -39,6 +39,12 @@ impl<T: MemPool> HeapFile<T> {
         // You may not end up using the header page, but some tests will assume this.
 
         // Add any extra initialization code in this function.
+        // register a container
+        // mem_pool.create_container(c_id, false).unwrap();
+
+        // allocate page 0 to header
+        mem_pool.create_new_page_for_write(c_id).unwrap();
+        
 
         let heap_file = HeapFile {
             c_id,
@@ -68,13 +74,19 @@ impl<T: MemPool> HeapFile<T> {
     /// Read a value at (page_id, slot_id) from the heap file.
     pub fn get_val(&self, page_id: PageId, slot_id: SlotId) -> Result<Vec<u8>, CrustyError> {
         let page = self.get_page_for_read(page_id);
-        panic!("TODO milestone hs");
+        match page.get_value(slot_id) {
+            Some(slice) => Ok(slice.to_vec()),
+            None => Err(CrustyError::CrustyError(format!("slot id {} not found", slot_id)))
+        }
     }
 
     // Delete a value at (page_id, slot_id) from the heap file.
     pub fn delete_val(&self, page_id: PageId, slot_id: SlotId) -> Result<(), CrustyError> {
         let mut page = self.get_page_for_write(page_id);
-        panic!("TODO milestone hs");
+        match page.delete_value(slot_id) {
+            Some(()) => Ok(()),
+            None => Err(CrustyError::CrustyError(format!("slot id {} not found", slot_id)))
+        }
     }
 
     pub fn update_val(
@@ -84,13 +96,30 @@ impl<T: MemPool> HeapFile<T> {
         val: &[u8],
     ) -> Result<ValueId, CrustyError> {
         let mut page = self.get_page_for_write(page_id);
-        panic!("TODO milestone hs");
+        match page.update_value(slot_id, val) {
+            Some(()) => Ok(ValueId { container_id: self.c_id, segment_id: None,page_id: Some(page_id), slot_id: Some(slot_id) }),
+            None => Err(CrustyError::CrustyError(format!("slot id {} not found", slot_id)))
+        }
     }
 
     // This function is not implemented in a thread-safe way. Can cause deadlocks when used in a multi-threaded environment.
     // We do not care about this for now.
     pub fn add_val(&self, val: &[u8]) -> Result<ValueId, CrustyError> {
-        panic!("TODO milestone hs");
+        // find available page to add val
+        for page_id in 1..self.num_pages() {
+            let mut page  = self.get_page_for_write(page_id);
+            if let Some(slot_id) = page.add_value(val) {
+                return Ok(ValueId { container_id: self.c_id, segment_id: None, page_id: Some(page_id), slot_id: Some(slot_id) });
+            }
+        }
+
+        // if no available page, allocate a new page
+        let mut page = self.bp.create_new_page_for_write(self.c_id).unwrap();
+        let page_id = page.get_page_id();
+        page.init_heap_page();
+        let slot_id = page.add_value(val).unwrap();
+
+        Ok(ValueId { container_id: self.c_id, segment_id: None, page_id: Some(page_id), slot_id: Some(slot_id) })
     }
 
     pub fn add_vals(
