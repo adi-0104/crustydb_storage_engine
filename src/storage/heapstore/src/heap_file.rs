@@ -109,11 +109,22 @@ impl<T: MemPool> HeapFile<T> {
         val: &[u8],
     ) -> Result<ValueId, CrustyError> {
         self.check_page_id(page_id)?;
-        let mut page = self.get_page_for_write(page_id);
-        match page.update_value(slot_id, val) {
-            Some(()) => Ok(ValueId { container_id: self.c_id, segment_id: None,page_id: Some(page_id), slot_id: Some(slot_id) }),
-            None => Err(CrustyError::CrustyError(format!("slot id {} not found", slot_id)))
+        {
+
+            let mut page = self.get_page_for_write(page_id);
+            // Note: handle cases where the value doesnt fit in page
+            // check slot 
+            if slot_id >= page.get_num_slots() || page.get_num_slots() == 0 {
+                return Err(CrustyError::CrustyError(format!("slot id {} not found", slot_id)));
+            }
+            if page.update_value(slot_id, val).is_some() {
+                return Ok(ValueId { container_id: self.c_id, segment_id: None,page_id: Some(page_id), slot_id: Some(slot_id) })
+            }
+            // drop gaurd at end of cope if None returned
         }
+        // update failed
+        self.delete_val(page_id, slot_id)?;
+        self.add_val(val)
     }
 
     // This function is not implemented in a thread-safe way. Can cause deadlocks when used in a multi-threaded environment.
