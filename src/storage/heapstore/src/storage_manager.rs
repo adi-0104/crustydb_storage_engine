@@ -165,10 +165,18 @@ impl StorageTrait for StorageManager {
         _dependencies: Option<Vec<ContainerId>>, // Not used in this milestone
     ) -> Result<(), CrustyError> {
         // If the container already exists, return an error.
+        if self.get_heapfile(container_id).is_ok(){
+            return Err(CrustyError::StorageError)
+        }
         // Otherwise create a new container and add it to the map.
         // Call create_container in the buffer pool to create the container there.
+        self.bp.create_container(container_id, false).map_err(|e| CrustyError::StorageError)?;
+
         // Initialize the container as a heapfile amd add to the cid_heapfile_map
-        panic!("TODO milestone hs");
+        let hf = Arc::new(HeapFile::new(container_id, self.bp.clone()).unwrap());
+
+        self.cid_heapfile_map.write()?.insert(container_id, hf);
+        Ok(())
     }
 
     /// A wrapper function to call create container
@@ -191,7 +199,8 @@ impl StorageTrait for StorageManager {
         _perm: Permissions,
     ) -> Self::ValIterator {
         // Get and return the HeapFileIter
-        panic!("TODO milestone hs");
+        let hf = self.get_heapfile(container_id).unwrap();
+        hf.iter()
     }
 
     /// Get an iterator that returns all valid records starting from a particular value id
@@ -206,7 +215,8 @@ impl StorageTrait for StorageManager {
         assert_eq!(c_id, container_id);
         let page_id = start.page_id.ok_or(c_err("Need page id")).unwrap();
         let slot_id = start.slot_id.ok_or(c_err("Need slot id")).unwrap();
-        panic!("TODO milestone hs");
+        let hf = self.get_heapfile(container_id).unwrap();
+        hf.iter_from(page_id, slot_id)
     }
 
     /// Get the data for a particular ValueId. Error if does not exists
