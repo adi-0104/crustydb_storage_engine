@@ -137,12 +137,12 @@ impl<T: MemPool> HeapFile<T> {
 
     pub fn iter(self: &Arc<Self>) -> HeapFileIter<T> {
         // Create the HeapFileIter
-        panic!("TODO milestone hs");
+        HeapFileIter::new_from(self.clone(), 1, 0)
     }
 
     pub fn iter_from(self: &Arc<Self>, page_id: PageId, slot_id: SlotId) -> HeapFileIter<T> {
         // Create the HeapFileIter
-        panic!("TODO milestone hs");
+        HeapFileIter::new_from(self.clone(), page_id, slot_id)
     }
 }
 
@@ -153,9 +153,12 @@ pub struct HeapFileIter<T: MemPool> {
     heapfile: Arc<HeapFile<T>>,
     initialized: bool,
     finished: bool,
+    #[allow(dead_code)]
     first_page: PageId,
     current_slot_id: SlotId,
     current_page: Option<FrameReadGuard<'static>>,
+    current_page_id: PageId
+
 }
 
 impl<T: MemPool> HeapFileIter<T> {
@@ -167,6 +170,7 @@ impl<T: MemPool> HeapFileIter<T> {
             first_page: page_id,
             current_slot_id: slot_id,
             current_page: None,
+            current_page_id: page_id
         }
     }
 
@@ -201,8 +205,47 @@ impl<T: MemPool> Iterator for HeapFileIter<T> {
         if !self.initialized {
             self.initialize();
         }
+        if self.finished {return None;}
+
 
         // Implement the iterator logic
-        panic!("TODO milestone hs");
+        // load first page
+        if self.current_page.is_none() {
+            // check if reached end of heapfile
+            if self.current_page_id >= self.heapfile.num_pages(){
+                self.finished = true;
+                return None;
+            }
+            self.current_page = Some(self.get_page(self.current_page_id));
+        }
+
+        while self.current_page_id < self.heapfile.num_pages() {
+            let page = self.current_page.as_ref().unwrap();
+            let num_slots = page.get_num_slots();
+
+            if self.current_slot_id < num_slots {
+                let slot_id = self.current_slot_id;
+                self.current_slot_id += 1;
+
+                if let Some(val) = page.get_value(slot_id){
+                    return Some((val.to_vec(), ValueId{ container_id: self.heapfile.c_id, segment_id: None,page_id: Some(self.current_page_id), slot_id: Some(slot_id) }));
+                }
+            }
+
+            else {
+                // next page
+                self.current_page = None;
+                self.current_page_id += 1;
+                // reset slot_id
+                self.current_slot_id = 0;
+
+                if self.current_page_id >= self.heapfile.num_pages(){
+                self.finished = true;
+                return None;
+            }
+            self.current_page = Some(self.get_page(self.current_page_id))
+            }
+        } 
+        None
     }
 }
