@@ -391,7 +391,6 @@ impl HeapPage for Page {
         }
         self.data[free_ptr..PAGE_SIZE].copy_from_slice(&temp[free_ptr..PAGE_SIZE]);
         self.set_free_ptr(free_ptr as u16);
-        self.data[IS_DIRTY_OFFSET] = 0;
     }
 }
 

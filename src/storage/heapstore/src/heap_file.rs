@@ -2,7 +2,7 @@ use crate::buffer_pool::buffer_frame::FrameReadGuard;
 use crate::buffer_pool::buffer_frame::FrameWriteGuard;
 use crate::buffer_pool::mem_pool_trait::MemPool;
 use crate::buffer_pool::mem_pool_trait::PageFrameId;
-use crate::heap_page::{HeapPage, SLOT_METADATA_SIZE};
+use crate::heap_page::HeapPage;
 #[allow(unused_imports)]
 use common::ids::AtomicPageId;
 use common::prelude::*;
@@ -14,6 +14,7 @@ use std::sync::Arc;
 pub(crate) struct HeapFile<T: MemPool> {
     c_id: ContainerId,
     bp: Arc<T>,
+    last_page: AtomicPageId,
 }
 
 /// HeapFile required functions
@@ -59,6 +60,7 @@ impl<T: MemPool> HeapFile<T> {
         let heap_file = HeapFile {
             c_id,
             bp: mem_pool.clone(),
+            last_page: AtomicPageId::new(0),
         };
         Ok(heap_file)
     }
@@ -70,6 +72,12 @@ impl<T: MemPool> HeapFile<T> {
         let heap_file = HeapFile {
             c_id,
             bp: mem_pool.clone(),
+            last_page: AtomicPageId::new(
+                mem_pool
+                    .get_max_page_id(c_id)
+                    .unwrap_or(1)
+                    .saturating_sub(1),
+            ),
         };
         Ok(heap_file)
     }
@@ -119,7 +127,10 @@ impl<T: MemPool> HeapFile<T> {
             let mut page = self.get_page_for_write(page_id);
             // Note: handle cases where the value doesnt fit in page
             // check slot
-            if slot_id >= page.get_num_slots() || page.get_num_slots() == 0 {
+            if slot_id >= page.get_num_slots()
+                || page.get_num_slots() == 0
+                || page.get_slot_length(slot_id) == 0
+            {
                 return Err(CrustyError::CrustyError(format!(
                     "slot id {} not found",
                     slot_id
@@ -143,33 +154,25 @@ impl<T: MemPool> HeapFile<T> {
     // This function is not implemented in a thread-safe way. Can cause deadlocks when used in a multi-threaded environment.
     // We do not care about this for now.
     pub fn add_val(&self, val: &[u8]) -> Result<ValueId, CrustyError> {
-        let val_len = val.len();
-        // find available page to add val
-        for page_id in 1..self.num_pages() {
-            // skip full pages before write lock.
-            {
-                let page = self.get_page_for_read(page_id);
-                if page.get_free_space() < val_len + SLOT_METADATA_SIZE {
-                    continue;
-                }
-            }
-            let mut page = self.get_page_for_write(page_id);
+        let last = self.last_page.load(Ordering::Relaxed);
+        if last > 0 {
+            let mut page = self.get_page_for_write(last);
             if let Some(slot_id) = page.add_value(val) {
                 return Ok(ValueId {
                     container_id: self.c_id,
                     segment_id: None,
-                    page_id: Some(page_id),
+                    page_id: Some(last),
                     slot_id: Some(slot_id),
                 });
             }
+            // continue to next block if add_value returns None
         }
-
         // if no available page, allocate a new page
         let mut page = self.bp.create_new_page_for_write(self.c_id).unwrap();
         let page_id = page.get_page_id();
         page.init_heap_page();
         let slot_id = page.add_value(val).unwrap();
-
+        self.last_page.store(page_id, Ordering::Relaxed);
         Ok(ValueId {
             container_id: self.c_id,
             segment_id: None,
