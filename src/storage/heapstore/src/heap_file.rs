@@ -2,7 +2,7 @@ use crate::buffer_pool::buffer_frame::FrameReadGuard;
 use crate::buffer_pool::buffer_frame::FrameWriteGuard;
 use crate::buffer_pool::mem_pool_trait::MemPool;
 use crate::buffer_pool::mem_pool_trait::PageFrameId;
-use crate::heap_page::HeapPage;
+use crate::heap_page::{HeapPage, SLOT_METADATA_SIZE};
 use common::error::c_err;
 #[allow(unused_imports)]
 use common::ids::AtomicPageId;
@@ -121,18 +121,26 @@ impl<T: MemPool> HeapFile<T> {
                 return Ok(ValueId { container_id: self.c_id, segment_id: None,page_id: Some(page_id), slot_id: Some(slot_id) })
             }
             // drop gaurd at end of cope if None returned
+            page.delete_value(slot_id);
         }
         // update failed
-        self.delete_val(page_id, slot_id)?;
         self.add_val(val)
     }
 
     // This function is not implemented in a thread-safe way. Can cause deadlocks when used in a multi-threaded environment.
     // We do not care about this for now.
     pub fn add_val(&self, val: &[u8]) -> Result<ValueId, CrustyError> {
+        let val_len = val.len();
         // find available page to add val
         for page_id in 1..self.num_pages() {
-            let mut page  = self.get_page_for_write(page_id);
+            // skip full pages before write lock.
+            {
+                let page = self.get_page_for_read(page_id);
+                if page.get_free_space() < val_len + SLOT_METADATA_SIZE {
+                    continue;
+                }
+            }
+            let mut page = self.get_page_for_write(page_id);
             if let Some(slot_id) = page.add_value(val) {
                 return Ok(ValueId { container_id: self.c_id, segment_id: None, page_id: Some(page_id), slot_id: Some(slot_id) });
             }
