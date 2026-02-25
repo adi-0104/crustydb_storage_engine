@@ -114,13 +114,7 @@ impl StorageTrait for StorageManager {
         _tid: TransactionId,
     ) -> Vec<ValueId> {
         trace!("Inserting len: {} into container: {}", values.len(), c_id);
-        let hf = self.get_heapfile(c_id).unwrap();
-        let mut res: Vec<ValueId> = Vec::new();
-        for value in values {
-            // append to result
-            res.push(hf.add_val(&value).unwrap());
-        }
-        res
+        self.get_heapfile(c_id).unwrap().add_vals(values.into_iter()).unwrap()
     }
 
     /// Delete the data for a value. If the valueID is not found it returns Ok() still.
@@ -170,7 +164,7 @@ impl StorageTrait for StorageManager {
         }
         // Otherwise create a new container and add it to the map.
         // Call create_container in the buffer pool to create the container there.
-        self.bp.create_container(container_id, false).map_err(|e| CrustyError::StorageError)?;
+        self.bp.create_container(container_id, false).map_err(|_| CrustyError::StorageError)?;
 
         // Initialize the container as a heapfile amd add to the cid_heapfile_map
         let hf = Arc::new(HeapFile::new(container_id, self.bp.clone()).unwrap());
