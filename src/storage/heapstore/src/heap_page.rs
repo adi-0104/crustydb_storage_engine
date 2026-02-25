@@ -21,6 +21,7 @@ pub(crate) const HEAP_PAGE_FIXED_METADATA_SIZE: usize = 8;
 pub const NUM_SLOTS_OFFSET: usize = PAGE_FIXED_HEADER_LEN;
 /// Offset in page where free_ptr is stored
 pub const FREE_PTR_OFFSET: usize = NUM_SLOTS_OFFSET + OFFSET_NUM_BYTES;
+pub const IS_DIRTY_OFFSET: usize = FREE_PTR_OFFSET + 2*OFFSET_NUM_BYTES;
 
 /// This is trait of a HeapPage for the Page struct.
 ///
@@ -116,6 +117,7 @@ impl HeapPage for Page {
         let total_bytes: u16 = 0;
         self.data[FREE_PTR_OFFSET + OFFSET_NUM_BYTES..FREE_PTR_OFFSET + (2 * OFFSET_NUM_BYTES)]
             .copy_from_slice(&total_bytes.to_le_bytes());
+        self.data[IS_DIRTY_OFFSET] = 0u8;
     }
 
     fn get_num_slots(&self) -> u16 {
@@ -193,11 +195,15 @@ impl HeapPage for Page {
         let mut slot_id: Option<SlotId> = None;
         let mut new_slot_flag = true;
 
-        for i in 0..num_slots {
-            if self.get_slot_length(i) == 0 {
-                slot_id = Some(i);
-                new_slot_flag = false;
-                break;
+        // skip if page is clean
+        if self.data[IS_DIRTY_OFFSET] != 0 {
+
+            for i in 0..num_slots {
+                if self.get_slot_length(i) == 0 {
+                    slot_id = Some(i);
+                    new_slot_flag = false;
+                    break;
+                }
             }
         }
         // move to last slot if no free slot
@@ -264,6 +270,8 @@ impl HeapPage for Page {
         self.set_total_bytes(self.get_total_bytes() - self.get_slot_length(slot_id));
         // set slot metadata to zero
         self.set_slot_metadata(slot_id, 0, 0);
+        // set marker for dirty page
+        self.data[IS_DIRTY_OFFSET] = 1u8;
 
         Some(())
     }
@@ -304,7 +312,7 @@ impl HeapPage for Page {
         self.set_slot_metadata(slot_id, 0, 0);
 
         // compact when contigous space isnt enough
-        let contiguous_space = self.get_free_ptr() - self.get_header_size() as u16;
+        let contiguous_space = self.get_free_ptr().saturating_sub(self.get_header_size() as u16);
         if new_byte_len as u16 > contiguous_space {
             self.compact();
         }
@@ -347,26 +355,43 @@ impl HeapPage for Page {
         }
     }
 
+    // fn compact(&mut self) {
+    //     let mut entries: Vec<(SlotId, Vec<u8>)> = Vec::new();
+    //     // collect all data present in page
+    //     for slot_id in 0..self.get_num_slots() {
+    //         if let Some(data) = self.get_value(slot_id) {
+    //             entries.push((slot_id, data.to_vec()));
+    //         }
+    //     }
+
+    //     // Rewrite bottom up
+    //     let mut free_ptr = PAGE_SIZE;
+    //     for (slot_id, current_value) in entries {
+    //         let value_len = current_value.len();
+    //         free_ptr -= value_len;
+    //         self.data[free_ptr..free_ptr + value_len].copy_from_slice(&current_value);
+    //         self.set_slot_metadata(slot_id, free_ptr as u16, value_len as u16);
+    //     }
+
+    //     self.set_free_ptr(free_ptr as u16);
+    // }
     fn compact(&mut self) {
-        let mut entries: Vec<(SlotId, Vec<u8>)> = Vec::new();
-        // collect all data present in page
+        let mut temp = [0u8; PAGE_SIZE];
+        let mut free_ptr = PAGE_SIZE;
         for slot_id in 0..self.get_num_slots() {
-            if let Some(data) = self.get_value(slot_id) {
-                entries.push((slot_id, data.to_vec()));
+            let offset = self.get_slot_offset(slot_id) as usize;
+            let length = self.get_slot_length(slot_id) as usize;
+            if length > 0 {
+                free_ptr -= length;
+                temp[free_ptr..free_ptr + length].copy_from_slice(&self.data[offset..offset + length]);
+                self.set_slot_metadata(slot_id, free_ptr as u16, length as u16);
             }
         }
-
-        // Rewrite bottom up
-        let mut free_ptr = PAGE_SIZE;
-        for (slot_id, current_value) in entries {
-            let value_len = current_value.len();
-            free_ptr -= value_len;
-            self.data[free_ptr..free_ptr + value_len].copy_from_slice(&current_value);
-            self.set_slot_metadata(slot_id, free_ptr as u16, value_len as u16);
-        }
-
+        self.data[free_ptr..PAGE_SIZE].copy_from_slice(&temp[free_ptr..PAGE_SIZE]);
         self.set_free_ptr(free_ptr as u16);
+        self.data[IS_DIRTY_OFFSET] = 0;
     }
+
 }
 
 pub struct HeapPageIter<'a> {
