@@ -217,10 +217,12 @@ pub struct HeapFileIter<T: MemPool> {
     current_slot_id: SlotId,
     current_page: Option<FrameReadGuard<'static>>,
     current_page_id: PageId,
+    num_pages: PageId,
 }
 
 impl<T: MemPool> HeapFileIter<T> {
     fn new_from(heapfile: Arc<HeapFile<T>>, page_id: PageId, slot_id: SlotId) -> Self {
+        let num_pages = heapfile.num_pages();
         HeapFileIter {
             heapfile,
             initialized: false,
@@ -229,6 +231,7 @@ impl<T: MemPool> HeapFileIter<T> {
             current_slot_id: slot_id,
             current_page: None,
             current_page_id: page_id,
+            num_pages,
         }
     }
 
@@ -270,15 +273,18 @@ impl<T: MemPool> Iterator for HeapFileIter<T> {
         // Implement the iterator logic
         // load first page
         if self.current_page.is_none() {
-            // check if reached end of heapfile
-            if self.current_page_id >= self.heapfile.num_pages() {
-                self.finished = true;
-                return None;
+            // check if reached end of heapfile (refresh cached count at page boundary)
+            if self.current_page_id >= self.num_pages {
+                self.num_pages = self.heapfile.num_pages();
+                if self.current_page_id >= self.num_pages {
+                    self.finished = true;
+                    return None;
+                }
             }
             self.current_page = Some(self.get_page(self.current_page_id));
         }
 
-        while self.current_page_id < self.heapfile.num_pages() {
+        loop {
             let page = self.current_page.as_ref().unwrap();
             let num_slots = page.get_num_slots();
 
@@ -301,16 +307,18 @@ impl<T: MemPool> Iterator for HeapFileIter<T> {
                 // next page
                 self.current_page = None;
                 self.current_page_id += 1;
-                // reset slot_id
                 self.current_slot_id = 0;
 
-                if self.current_page_id >= self.heapfile.num_pages() {
-                    self.finished = true;
-                    return None;
+                if self.current_page_id >= self.num_pages {
+                    // refresh count for check
+                    self.num_pages = self.heapfile.num_pages();
+                    if self.current_page_id >= self.num_pages {
+                        self.finished = true;
+                        return None;
+                    }
                 }
-                self.current_page = Some(self.get_page(self.current_page_id))
+                self.current_page = Some(self.get_page(self.current_page_id));
             }
         }
-        None
     }
 }

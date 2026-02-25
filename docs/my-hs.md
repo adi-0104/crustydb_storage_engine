@@ -9,6 +9,8 @@ Added a Dirty Page Marker in the heap_page header metadata so that inserting a v
 
 add_val - does a read lock pass first to skip attempts at writing to pages that don't have space for the slot metadata and actual value.
 
+Heapfile Iter - while experimenting different optimisation strategies I tried to reduce the number of calles to num_pages() which seemed like a heavy call for each check i was performing. Added a num_pages field to reduce the number of calls to this method and saw a slight improvement. 
+
 
 ## Time Estimate / Reflection
 
