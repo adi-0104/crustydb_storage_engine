@@ -29,7 +29,9 @@ impl StorageManager {
         //
         let map = self.cid_heapfile_map.read().unwrap();
 
-        map.get(&c_id).cloned().ok_or(CrustyError::ContainerDoesNotExist)
+        map.get(&c_id)
+            .cloned()
+            .ok_or(CrustyError::ContainerDoesNotExist)
     }
 
     /// Get the number of pages for a container
@@ -64,7 +66,7 @@ impl StorageTrait for StorageManager {
         for c_id in cfc.container_ids() {
             //TODO milestone hs
             // Load the heapfile and add it to hf_map
-            let hf = Arc::new( HeapFile::load(c_id, bp.clone()).unwrap());
+            let hf = Arc::new(HeapFile::load(c_id, bp.clone()).unwrap());
             hf_map.insert(c_id, hf);
         }
 
@@ -114,7 +116,10 @@ impl StorageTrait for StorageManager {
         _tid: TransactionId,
     ) -> Vec<ValueId> {
         trace!("Inserting len: {} into container: {}", values.len(), c_id);
-        self.get_heapfile(c_id).unwrap().add_vals(values.into_iter()).unwrap()
+        self.get_heapfile(c_id)
+            .unwrap()
+            .add_vals(values.into_iter())
+            .unwrap()
     }
 
     /// Delete the data for a value. If the valueID is not found it returns Ok() still.
@@ -122,7 +127,8 @@ impl StorageTrait for StorageManager {
         trace!("Deleting {:?}", id);
         let page_id = id.page_id.ok_or(c_err("Need page id"))?;
         let slot_id = id.slot_id.ok_or(c_err("Need slot id"))?;
-        self.get_heapfile(id.container_id)?.delete_val(page_id, slot_id)
+        self.get_heapfile(id.container_id)?
+            .delete_val(page_id, slot_id)
     }
 
     /// Updates a value. Returns valueID on update (which may have changed). Error on failure
@@ -137,8 +143,8 @@ impl StorageTrait for StorageManager {
         trace!("Updating {:?}", id);
         let page_id = id.page_id.ok_or(c_err("Need page id"))?;
         let slot_id = id.slot_id.ok_or(c_err("Need slot id"))?;
-        self.get_heapfile(id.container_id)?.update_val(page_id, slot_id, &value)
-        
+        self.get_heapfile(id.container_id)?
+            .update_val(page_id, slot_id, &value)
     }
 
     /// Create a new container to be stored.
@@ -159,12 +165,14 @@ impl StorageTrait for StorageManager {
         _dependencies: Option<Vec<ContainerId>>, // Not used in this milestone
     ) -> Result<(), CrustyError> {
         // If the container already exists, return an error.
-        if self.get_heapfile(container_id).is_ok(){
-            return Err(CrustyError::StorageError)
+        if self.get_heapfile(container_id).is_ok() {
+            return Err(CrustyError::StorageError);
         }
         // Otherwise create a new container and add it to the map.
         // Call create_container in the buffer pool to create the container there.
-        self.bp.create_container(container_id, false).map_err(|_| CrustyError::StorageError)?;
+        self.bp
+            .create_container(container_id, false)
+            .map_err(|_| CrustyError::StorageError)?;
 
         // Initialize the container as a heapfile amd add to the cid_heapfile_map
         let hf = Arc::new(HeapFile::new(container_id, self.bp.clone()).unwrap());

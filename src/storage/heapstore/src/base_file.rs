@@ -2,7 +2,7 @@ use crate::file_stats::FileStats;
 use crate::page::Page;
 use common::ids::{ContainerId, PageId};
 use common::PAGE_SIZE;
-use libc::{c_void, fsync, pread, pwrite};
+use libc::{c_void, fsync};
 use std::fs::{File, OpenOptions};
 use std::mem::MaybeUninit;
 use std::os::unix::io::AsRawFd;
@@ -106,7 +106,12 @@ impl BaseFileTrait for BaseFile {
             //
             // HINT to cast the page to a mutable pointer use:
             // page.to_bytes_mut().as_mut_ptr() as *mut c_void
-            let read_bytes = libc::pread(self.file_no, page.to_bytes_mut().as_mut_ptr() as *mut c_void,PAGE_SIZE, page_id as i64 * PAGE_SIZE as i64);
+            let read_bytes = libc::pread(
+                self.file_no,
+                page.to_bytes_mut().as_mut_ptr() as *mut c_void,
+                PAGE_SIZE,
+                page_id as i64 * PAGE_SIZE as i64,
+            );
 
             if read_bytes != PAGE_SIZE as isize {
                 return Err(std::io::Error::last_os_error());
@@ -131,7 +136,12 @@ impl BaseFileTrait for BaseFile {
             //
             // HINT to cast the page to a pointer use:
             // page.to_bytes().as_ptr() as *const c_void
-            let write_bytes = libc::pwrite(self.file_no, page.to_bytes().as_ptr() as *const c_void,PAGE_SIZE, page_id as i64 * PAGE_SIZE as i64);
+            let write_bytes = libc::pwrite(
+                self.file_no,
+                page.to_bytes().as_ptr() as *const c_void,
+                PAGE_SIZE,
+                page_id as i64 * PAGE_SIZE as i64,
+            );
 
             if write_bytes != PAGE_SIZE as isize {
                 return Err(std::io::Error::last_os_error());

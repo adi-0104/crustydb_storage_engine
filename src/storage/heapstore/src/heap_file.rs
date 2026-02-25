@@ -3,7 +3,6 @@ use crate::buffer_pool::buffer_frame::FrameWriteGuard;
 use crate::buffer_pool::mem_pool_trait::MemPool;
 use crate::buffer_pool::mem_pool_trait::PageFrameId;
 use crate::heap_page::{HeapPage, SLOT_METADATA_SIZE};
-use common::error::c_err;
 #[allow(unused_imports)]
 use common::ids::AtomicPageId;
 use common::prelude::*;
@@ -36,12 +35,14 @@ impl<T: MemPool> HeapFile<T> {
     // helper
     fn check_page_id(&self, page_id: PageId) -> Result<(), CrustyError> {
         if page_id >= self.num_pages() {
-            Err(CrustyError::CrustyError(format!("page id {} out of bounds", page_id)))
+            Err(CrustyError::CrustyError(format!(
+                "page id {} out of bounds",
+                page_id
+            )))
         } else {
             Ok(())
         }
     }
-
 
     /// Create a brand-new heap file for container `c_id`.
     pub fn new(c_id: ContainerId, mem_pool: Arc<T>) -> Result<Self, CrustyError> {
@@ -54,7 +55,6 @@ impl<T: MemPool> HeapFile<T> {
 
         // allocate page 0 to header
         mem_pool.create_new_page_for_write(c_id).unwrap();
-        
 
         let heap_file = HeapFile {
             c_id,
@@ -88,7 +88,10 @@ impl<T: MemPool> HeapFile<T> {
         let page = self.get_page_for_read(page_id);
         match page.get_value(slot_id) {
             Some(slice) => Ok(slice.to_vec()),
-            None => Err(CrustyError::CrustyError(format!("slot id {} not found", slot_id)))
+            None => Err(CrustyError::CrustyError(format!(
+                "slot id {} not found",
+                slot_id
+            ))),
         }
     }
 
@@ -98,7 +101,10 @@ impl<T: MemPool> HeapFile<T> {
         let mut page = self.get_page_for_write(page_id);
         match page.delete_value(slot_id) {
             Some(()) => Ok(()),
-            None => Err(CrustyError::CrustyError(format!("slot id {} not found", slot_id)))
+            None => Err(CrustyError::CrustyError(format!(
+                "slot id {} not found",
+                slot_id
+            ))),
         }
     }
 
@@ -110,15 +116,22 @@ impl<T: MemPool> HeapFile<T> {
     ) -> Result<ValueId, CrustyError> {
         self.check_page_id(page_id)?;
         {
-
             let mut page = self.get_page_for_write(page_id);
             // Note: handle cases where the value doesnt fit in page
-            // check slot 
+            // check slot
             if slot_id >= page.get_num_slots() || page.get_num_slots() == 0 {
-                return Err(CrustyError::CrustyError(format!("slot id {} not found", slot_id)));
+                return Err(CrustyError::CrustyError(format!(
+                    "slot id {} not found",
+                    slot_id
+                )));
             }
             if page.update_value(slot_id, val).is_some() {
-                return Ok(ValueId { container_id: self.c_id, segment_id: None,page_id: Some(page_id), slot_id: Some(slot_id) })
+                return Ok(ValueId {
+                    container_id: self.c_id,
+                    segment_id: None,
+                    page_id: Some(page_id),
+                    slot_id: Some(slot_id),
+                });
             }
             // drop gaurd at end of cope if None returned
             page.delete_value(slot_id);
@@ -142,7 +155,12 @@ impl<T: MemPool> HeapFile<T> {
             }
             let mut page = self.get_page_for_write(page_id);
             if let Some(slot_id) = page.add_value(val) {
-                return Ok(ValueId { container_id: self.c_id, segment_id: None, page_id: Some(page_id), slot_id: Some(slot_id) });
+                return Ok(ValueId {
+                    container_id: self.c_id,
+                    segment_id: None,
+                    page_id: Some(page_id),
+                    slot_id: Some(slot_id),
+                });
             }
         }
 
@@ -152,7 +170,12 @@ impl<T: MemPool> HeapFile<T> {
         page.init_heap_page();
         let slot_id = page.add_value(val).unwrap();
 
-        Ok(ValueId { container_id: self.c_id, segment_id: None, page_id: Some(page_id), slot_id: Some(slot_id) })
+        Ok(ValueId {
+            container_id: self.c_id,
+            segment_id: None,
+            page_id: Some(page_id),
+            slot_id: Some(slot_id),
+        })
     }
 
     pub fn add_vals(
@@ -190,8 +213,7 @@ pub struct HeapFileIter<T: MemPool> {
     first_page: PageId,
     current_slot_id: SlotId,
     current_page: Option<FrameReadGuard<'static>>,
-    current_page_id: PageId
-
+    current_page_id: PageId,
 }
 
 impl<T: MemPool> HeapFileIter<T> {
@@ -203,7 +225,7 @@ impl<T: MemPool> HeapFileIter<T> {
             first_page: page_id,
             current_slot_id: slot_id,
             current_page: None,
-            current_page_id: page_id
+            current_page_id: page_id,
         }
     }
 
@@ -238,14 +260,15 @@ impl<T: MemPool> Iterator for HeapFileIter<T> {
         if !self.initialized {
             self.initialize();
         }
-        if self.finished {return None;}
-
+        if self.finished {
+            return None;
+        }
 
         // Implement the iterator logic
         // load first page
         if self.current_page.is_none() {
             // check if reached end of heapfile
-            if self.current_page_id >= self.heapfile.num_pages(){
+            if self.current_page_id >= self.heapfile.num_pages() {
                 self.finished = true;
                 return None;
             }
@@ -260,25 +283,31 @@ impl<T: MemPool> Iterator for HeapFileIter<T> {
                 let slot_id = self.current_slot_id;
                 self.current_slot_id += 1;
 
-                if let Some(val) = page.get_value(slot_id){
-                    return Some((val.to_vec(), ValueId{ container_id: self.heapfile.c_id, segment_id: None,page_id: Some(self.current_page_id), slot_id: Some(slot_id) }));
+                if let Some(val) = page.get_value(slot_id) {
+                    return Some((
+                        val.to_vec(),
+                        ValueId {
+                            container_id: self.heapfile.c_id,
+                            segment_id: None,
+                            page_id: Some(self.current_page_id),
+                            slot_id: Some(slot_id),
+                        },
+                    ));
                 }
-            }
-
-            else {
+            } else {
                 // next page
                 self.current_page = None;
                 self.current_page_id += 1;
                 // reset slot_id
                 self.current_slot_id = 0;
 
-                if self.current_page_id >= self.heapfile.num_pages(){
-                self.finished = true;
-                return None;
+                if self.current_page_id >= self.heapfile.num_pages() {
+                    self.finished = true;
+                    return None;
+                }
+                self.current_page = Some(self.get_page(self.current_page_id))
             }
-            self.current_page = Some(self.get_page(self.current_page_id))
-            }
-        } 
+        }
         None
     }
 }
