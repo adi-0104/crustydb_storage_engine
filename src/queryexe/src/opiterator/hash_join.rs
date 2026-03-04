@@ -43,7 +43,20 @@ impl HashEqJoin {
         left_child: Box<dyn OpIterator>,
         right_child: Box<dyn OpIterator>,
     ) -> Self {
-        panic!("TODO milestone op");
+        Self {
+            managers,
+            schema,
+            left_expr,
+            right_expr,
+            left_child,
+            right_child,
+            open: false,
+            join_map: HashMap::new(),
+            current_tuple: None,
+            current_idx: 0,
+        }
+        
+        
     }
 }
 
@@ -54,7 +67,23 @@ impl OpIterator for HashEqJoin {
     }
 
     fn open(&mut self) -> Result<(), CrustyError> {
-        panic!("TODO milestone op");
+        if self.open {
+            return  Ok(());
+        }
+        self.right_child.open()?;
+        self.left_child.open()?;
+
+        // init hash keys using left child tuples 
+        while let Some(t) = self.left_child.next()? {
+            let hash_key = self.left_expr.eval(&t);
+            self.join_map.entry(hash_key).or_insert(vec![]).push(t);
+        }
+
+        // exhause left
+        self.current_tuple = self.right_child.next()?;
+        self.open = true;
+        Ok(())
+
     }
 
     fn next(&mut self) -> Result<Option<Tuple>, CrustyError> {
@@ -62,7 +91,12 @@ impl OpIterator for HashEqJoin {
     }
 
     fn close(&mut self) -> Result<(), CrustyError> {
-        panic!("TODO milestone op");
+        self.left_child.close()?;
+        self.right_child.close()?;
+        self.current_idx = 0;
+        self.current_tuple = None;
+        self.open = false;
+        Ok(())
     }
 
     fn rewind(&mut self) -> Result<(), CrustyError> {
