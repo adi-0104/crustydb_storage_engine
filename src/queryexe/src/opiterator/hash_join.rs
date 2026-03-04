@@ -107,6 +107,7 @@ impl OpIterator for HashEqJoin {
     fn close(&mut self) -> Result<(), CrustyError> {
         self.left_child.close()?;
         self.right_child.close()?;
+        self.join_map.clear();
         self.current_idx = 0;
         self.current_tuple = None;
         self.open = false;
