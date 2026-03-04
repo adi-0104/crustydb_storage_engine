@@ -158,8 +158,23 @@ impl OpIterator for Aggregate {
                 self.merge_tuple_into_group(&t);
             }
 
-            // init iterator?
             // use the running accumulator  to form the tuples to iterate over
+            for (group_key, (count, agg_vals)) in &self.acc{
+                let mut fields = group_key.clone();
+                for (op, val) in self.ops.iter().zip( agg_vals.iter()){
+                    if *op == AggOp::Avg {
+                        if let Field::BigInt(sum) = val {
+                            fields.push(f_decimal(*sum as f64 / *count as f64));
+                        } else {
+                            panic!("Avg only supported on integer fields");
+                        }
+                    } else {
+                        fields.push(val.clone())
+                    }
+                }
+                self.acc_iter.push(Tuple::new(fields))
+            }
+
             self.index = 0;
             self.open = true;
         }
@@ -167,11 +182,26 @@ impl OpIterator for Aggregate {
     }
 
     fn next(&mut self) -> Result<Option<Tuple>, CrustyError> {
-        panic!("TODO milestone op");
+        if !self.open {
+            panic!("Iterator is not open");
+        }
+
+        // iter with index athrough acc_iter for each next call
+        if self.index < self.acc_iter.len() {
+            let t = self.acc_iter[self.index].clone();
+            self.index += 1;
+            return Ok(Some(t));
+        }
+        Ok(None)
     }
 
     fn close(&mut self) -> Result<(), CrustyError> {
-        panic!("TODO milestone op");
+        self.child.close()?;
+        self.acc.clear();
+        self.acc_iter.clear();
+        self.index = 0;
+        self.open = false;
+        Ok(())
     }
 
     fn rewind(&mut self) -> Result<(), CrustyError> {
