@@ -55,8 +55,6 @@ impl HashEqJoin {
             current_tuple: None,
             current_idx: 0,
         }
-        
-        
     }
 }
 
@@ -68,12 +66,12 @@ impl OpIterator for HashEqJoin {
 
     fn open(&mut self) -> Result<(), CrustyError> {
         if self.open {
-            return  Ok(());
+            return Ok(());
         }
         self.right_child.open()?;
         self.left_child.open()?;
 
-        // init hash keys using left child tuples 
+        // init hash keys using left child tuples
         while let Some(t) = self.left_child.next()? {
             let hash_key = self.left_expr.eval(&t);
             self.join_map.entry(hash_key).or_insert(vec![]).push(t);
@@ -83,7 +81,6 @@ impl OpIterator for HashEqJoin {
         self.current_tuple = self.right_child.next()?;
         self.open = true;
         Ok(())
-
     }
 
     fn next(&mut self) -> Result<Option<Tuple>, CrustyError> {
@@ -97,7 +94,7 @@ impl OpIterator for HashEqJoin {
                 if self.current_idx < hashed_tuples.len() {
                     let left_tuple = hashed_tuples[self.current_idx].clone();
                     self.current_idx += 1;
-                    return Ok(Some(left_tuple.merge(&right_tuple)))
+                    return Ok(Some(left_tuple.merge(&right_tuple)));
                 }
             }
             self.current_tuple = self.right_child.next()?;

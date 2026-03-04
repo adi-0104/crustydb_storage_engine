@@ -126,20 +126,24 @@ impl Aggregate {
 
         // add new group key-val if doesnt exist
         if !self.acc.contains_key(&group_key) {
-            let init_vals: Vec<Field> = self.ops.iter().zip(agg_values.iter()).map(|(op, val)| match op {
-                AggOp::Count => Field::BigInt(1),
-                _ => val.clone(),
-            }).collect();
+            let init_vals: Vec<Field> = self
+                .ops
+                .iter()
+                .zip(agg_values.iter())
+                .map(|(op, val)| match op {
+                    AggOp::Count => Field::BigInt(1),
+                    _ => val.clone(),
+                })
+                .collect();
             self.acc.insert(group_key, (1, init_vals));
         } else {
-            // accumulate exisiting 
+            // accumulate exisiting
             let (count, running_grp_aggr) = self.acc.get_mut(&group_key).unwrap();
             for i in 0..self.ops.len() {
                 Self::merge_fields(self.ops[i], &agg_values[i], &mut running_grp_aggr[i]).unwrap();
             }
             *count += 1;
         }
-
     }
 }
 
@@ -154,14 +158,14 @@ impl OpIterator for Aggregate {
         if !self.open {
             self.child.open()?;
             // merge tuple into groups
-            while let Some(t) = self.child.next()?{
+            while let Some(t) = self.child.next()? {
                 self.merge_tuple_into_group(&t);
             }
 
             // use the running accumulator  to form the tuples to iterate over
-            for (group_key, (count, agg_vals)) in &self.acc{
+            for (group_key, (count, agg_vals)) in &self.acc {
                 let mut fields = group_key.clone();
-                for (op, val) in self.ops.iter().zip( agg_vals.iter()){
+                for (op, val) in self.ops.iter().zip(agg_vals.iter()) {
                     if *op == AggOp::Avg {
                         if let Field::BigInt(sum) = val {
                             fields.push(f_decimal(*sum as f64 / *count as f64));

@@ -78,11 +78,11 @@ impl OpIterator for NestedLoopJoin {
             if let Some(right_tuple) = self.right_child.next()? {
                 let left = self.left_expr.eval(&left_tuple);
                 let right = self.right_expr.eval(&right_tuple);
-                if compare_fields(self.op, &left, &right){
-                    return Ok(Some(left_tuple.merge(&right_tuple)))
+                if compare_fields(self.op, &left, &right) {
+                    return Ok(Some(left_tuple.merge(&right_tuple)));
                 }
             } else {
-                // right done -> reset 
+                // right done -> reset
                 self.right_child.rewind()?;
                 self.current_tuple = self.left_child.next()?;
             }
