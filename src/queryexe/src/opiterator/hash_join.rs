@@ -89,12 +89,12 @@ impl OpIterator for HashEqJoin {
         }
         // probe hashmap using tuples on the riht table
         while let Some(right_tuple) = &self.current_tuple {
-            let key = self.right_expr.eval(&right_tuple);
+            let key = self.right_expr.eval(right_tuple);
             if let Some(hashed_tuples) = self.join_map.get(&key) {
                 if self.current_idx < hashed_tuples.len() {
                     let left_tuple = hashed_tuples[self.current_idx].clone();
                     self.current_idx += 1;
-                    return Ok(Some(left_tuple.merge(&right_tuple)));
+                    return Ok(Some(left_tuple.merge(right_tuple)));
                 }
             }
             self.current_tuple = self.right_child.next()?;

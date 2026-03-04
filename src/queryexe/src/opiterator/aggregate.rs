@@ -122,7 +122,7 @@ impl Aggregate {
             .iter()
             .map(|expr| expr.eval(tuple))
             .collect::<Vec<Field>>();
-        let agg_values: Vec<Field> = self.agg_expr.iter().map(|e| e.eval(&tuple)).collect();
+        let agg_values: Vec<Field> = self.agg_expr.iter().map(|e| e.eval(tuple)).collect();
 
         // add new group key-val if doesnt exist
         if !self.acc.contains_key(&group_key) {
