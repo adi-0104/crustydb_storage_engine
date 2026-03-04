@@ -117,12 +117,29 @@ impl Aggregate {
     /// * `tuple` - Tuple to add to a group.
     pub fn merge_tuple_into_group(&mut self, tuple: &Tuple) {
         // Reference for extracting group key, which should be the key for self.acc
-        let group_key = self
+        let group_key: Vec<Field> = self
             .groupby_expr
             .iter()
             .map(|expr| expr.eval(tuple))
             .collect::<Vec<Field>>();
-        panic!("TODO milestone op");
+        let agg_values: Vec<Field> = self.agg_expr.iter().map(|e| e.eval(&tuple)).collect();
+
+        // add new group key-val if doesnt exist
+        if !self.acc.contains_key(&group_key) {
+            let init_vals: Vec<Field> = self.ops.iter().zip(agg_values.iter()).map(|(op, val)| match op {
+                AggOp::Count => Field::BigInt(1),
+                _ => val.clone(),
+            }).collect();
+            self.acc.insert(group_key, (1, init_vals));
+        } else {
+            // accumulate exisiting 
+            let (count, running_grp_aggr) = self.acc.get_mut(&group_key).unwrap();
+            for i in 0..self.ops.len() {
+                Self::merge_fields(self.ops[i], &agg_values[i], &mut running_grp_aggr[i]).unwrap();
+            }
+            *count += 1;
+        }
+
     }
 }
 
