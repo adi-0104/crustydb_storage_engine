@@ -472,14 +472,18 @@ impl LogicalRelExpr {
                 if predicates.len() == 1 {
                     if let Expression::Binary {
                         op: crate::BinaryOp::Eq,
-                        left: left_key,
-                        right: right_key,
+                        left: _,
+                        right: _,
                     } = &predicates[0]
                     {
-                        debug!(
-                            "Join predicate is an binary equality predicate between {:?} and {:?}",
-                            left_key, right_key
-                        );
+                        // ad hashjoin for binary expression
+                        return PhysicalRelExpr::HashJoin {
+                        join_type: *join_type,
+                        left: Box::new(left.to_physical_plan()),
+                        right: Box::new(right.to_physical_plan()),
+                        predicates,
+                        tree_hash: None,
+                    };
                     }
                 }
 
