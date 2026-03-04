@@ -151,7 +151,19 @@ impl OpIterator for Aggregate {
     }
 
     fn open(&mut self) -> Result<(), CrustyError> {
-        panic!("TODO milestone op");
+        if !self.open {
+            self.child.open()?;
+            // merge tuple into groups
+            while let Some(t) = self.child.next()?{
+                self.merge_tuple_into_group(&t);
+            }
+
+            // init iterator?
+            // use the running accumulator  to form the tuples to iterate over
+            self.index = 0;
+            self.open = true;
+        }
+        Ok(())
     }
 
     fn next(&mut self) -> Result<Option<Tuple>, CrustyError> {
