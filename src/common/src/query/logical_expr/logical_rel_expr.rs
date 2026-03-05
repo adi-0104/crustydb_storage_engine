@@ -478,12 +478,12 @@ impl LogicalRelExpr {
                     {
                         // ad hashjoin for binary expression
                         return PhysicalRelExpr::HashJoin {
-                        join_type: *join_type,
-                        left: Box::new(left.to_physical_plan()),
-                        right: Box::new(right.to_physical_plan()),
-                        predicates,
-                        tree_hash: None,
-                    };
+                            join_type: *join_type,
+                            left: Box::new(left.to_physical_plan()),
+                            right: Box::new(right.to_physical_plan()),
+                            predicates,
+                            tree_hash: None,
+                        };
                     }
                 }
 
