@@ -2,7 +2,6 @@ pub use self::aggregate::Aggregate;
 pub use self::cross_join::CrossJoin;
 pub use self::filter::Filter;
 pub use self::hash_join::HashEqJoin;
-pub use grace_hash_join::GraceHashJoin;
 pub use self::nested_loop_join::NestedLoopJoin;
 pub use self::project::Project;
 pub use self::seqscan::SeqScan;
@@ -11,6 +10,7 @@ pub use self::sort_merge_join::SortMergeJoin;
 pub use self::tuple_iterator::TupleIterator;
 pub use self::update::Update;
 use common::{CrustyError, TableSchema, Tuple};
+pub use grace_hash_join::GraceHashJoin;
 
 mod aggregate;
 mod cross_join;

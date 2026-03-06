@@ -1,11 +1,16 @@
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
-use common::{CrustyError, Field, TableSchema, Tuple, ids::{ContainerId, Permissions, StateType, TransactionId}, query::bytecode_expr::ByteCodeExpr, traits::storage_trait::StorageTrait};
-use storage::StorageManager;
+use common::{
+    ids::{ContainerId, Permissions, StateType, TransactionId},
+    query::bytecode_expr::ByteCodeExpr,
+    traits::storage_trait::StorageTrait,
+    CrustyError, Field, TableSchema, Tuple,
+};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use storage::StorageManager;
 
-use crate::{Managers, opiterator::OpIterator};
+use crate::{opiterator::OpIterator, Managers};
 
 pub struct GraceHashJoin {
     #[allow(dead_code)]
@@ -85,22 +90,35 @@ impl GraceHashJoin {
         self.current_join_map.clear();
 
         // load left partition from disk
-        for (bytes, _) in self.managers.sm.get_iterator(self.left_partition_cids[partition_id], self.tid, Permissions::ReadOnly) {
+        for (bytes, _) in self.managers.sm.get_iterator(
+            self.left_partition_cids[partition_id],
+            self.tid,
+            Permissions::ReadOnly,
+        ) {
             let t = Tuple::from_bytes(&bytes);
             let key = self.left_expr.eval(&t);
-            self.current_join_map.entry(key).or_insert(Vec::new()).push(t);
+            self.current_join_map
+                .entry(key)
+                .or_default()
+                .push(t);
         }
 
         // setup right partition iterator for probing
-        self.current_right_iter = Some(self.managers.sm.get_iterator(self.right_partition_cids[partition_id], self.tid, Permissions::ReadOnly));
+        self.current_right_iter = Some(self.managers.sm.get_iterator(
+            self.right_partition_cids[partition_id],
+            self.tid,
+            Permissions::ReadOnly,
+        ));
 
         // find first right tuple
-        self.current_right_tuple = self.current_right_iter.as_mut().and_then(|it| it.next() ).map(|(bytes, _)| Tuple::from_bytes(&bytes));
+        self.current_right_tuple = self
+            .current_right_iter
+            .as_mut()
+            .and_then(|it| it.next())
+            .map(|(bytes, _)| Tuple::from_bytes(&bytes));
 
         self.current_match_idx = 0;
-
     }
-
 }
 
 impl OpIterator for GraceHashJoin {
@@ -108,7 +126,6 @@ impl OpIterator for GraceHashJoin {
         self.left_child.configure(false);
         self.right_child.configure(will_rewind);
     }
-
 
     fn open(&mut self) -> Result<(), CrustyError> {
         if self.open {
@@ -123,11 +140,15 @@ impl OpIterator for GraceHashJoin {
             let right_cid = GRACE_BASE_CID + self.num_partitions as u16 + i as u16;
 
             // left partitions
-            self.managers.sm.create_container(left_cid, None, StateType::BaseTable, None)?;
+            self.managers
+                .sm
+                .create_container(left_cid, None, StateType::BaseTable, None)?;
             self.left_partition_cids.push(left_cid);
-            
+
             // right
-            self.managers.sm.create_container(right_cid, None, StateType::BaseTable, None)?;
+            self.managers
+                .sm
+                .create_container(right_cid, None, StateType::BaseTable, None)?;
             self.right_partition_cids.push(right_cid);
         }
 
@@ -135,22 +156,18 @@ impl OpIterator for GraceHashJoin {
         while let Some(t) = self.left_child.next()? {
             let key = self.left_expr.eval(&t);
             let pid = Self::get_partition_id(&key, self.num_partitions);
-            self.managers.sm.insert_value(
-                self.left_partition_cids[pid],
-                t.to_bytes(),
-                self.tid,
-            );
+            self.managers
+                .sm
+                .insert_value(self.left_partition_cids[pid], t.to_bytes(), self.tid);
         }
 
         // hash and partition  right tuple keys to respective containers
         while let Some(t) = self.right_child.next()? {
             let key = self.right_expr.eval(&t);
             let pid = Self::get_partition_id(&key, self.num_partitions);
-            self.managers.sm.insert_value(
-                self.right_partition_cids[pid],
-                t.to_bytes(),
-                self.tid,
-            );
+            self.managers
+                .sm
+                .insert_value(self.right_partition_cids[pid], t.to_bytes(), self.tid);
         }
 
         self.open = true;
@@ -182,7 +199,8 @@ impl OpIterator for GraceHashJoin {
                     }
                 }
                 // exhausted matches, advance to next right child in partition
-                self.current_right_tuple = self.current_right_iter
+                self.current_right_tuple = self
+                    .current_right_iter
                     .as_mut()
                     .and_then(|iter| iter.next())
                     .map(|(bytes, _)| Tuple::from_bytes(&bytes));
@@ -194,7 +212,7 @@ impl OpIterator for GraceHashJoin {
             if self.current_partition >= self.num_partitions {
                 return Ok(None);
             }
-            self.load_partition(self.current_partition);  
+            self.load_partition(self.current_partition);
         }
 
         Ok(None)
@@ -214,7 +232,7 @@ impl OpIterator for GraceHashJoin {
         self.open = false;
         Ok(())
     }
-    
+
     fn rewind(&mut self) -> Result<(), CrustyError> {
         if !self.open {
             panic!("Operator has not been opened")
@@ -233,19 +251,15 @@ impl OpIterator for GraceHashJoin {
     fn get_schema(&self) -> &TableSchema {
         &self.schema
     }
-
 }
-
-
-
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use super::super::TupleIterator;
+    use super::*;
     use crate::testutil::{execute_iter, new_test_managers, TestTuples};
-    use common::{Field, Tuple};
     use common::query::bytecode_expr::{ByteCodeExpr, ByteCodes};
+    use common::{Field, Tuple};
 
     fn get_join_predicate() -> (ByteCodeExpr, ByteCodeExpr) {
         // Joining two tables each containing the following tuples:
@@ -278,8 +292,14 @@ mod test {
             setup.schema.clone(),
             left_expr,
             right_expr,
-            Box::new(TupleIterator::new(setup.tuples.clone(), setup.schema.clone())),
-            Box::new(TupleIterator::new(setup.tuples.clone(), setup.schema.clone())),
+            Box::new(TupleIterator::new(
+                setup.tuples.clone(),
+                setup.schema.clone(),
+            )),
+            Box::new(TupleIterator::new(
+                setup.tuples.clone(),
+                setup.schema.clone(),
+            )),
             Some(4),
             TransactionId::new(),
         ));
@@ -319,29 +339,53 @@ mod test {
             assert_eq!(
                 t[0],
                 Tuple::new(vec![
-                    Field::BigInt(2), Field::BigInt(1), Field::BigInt(3), Field::String("G".to_string()),
-                    Field::BigInt(1), Field::BigInt(1), Field::BigInt(3), Field::String("E".to_string()),
+                    Field::BigInt(2),
+                    Field::BigInt(1),
+                    Field::BigInt(3),
+                    Field::String("G".to_string()),
+                    Field::BigInt(1),
+                    Field::BigInt(1),
+                    Field::BigInt(3),
+                    Field::String("E".to_string()),
                 ])
             );
             assert_eq!(
                 t[1],
                 Tuple::new(vec![
-                    Field::BigInt(2), Field::BigInt(1), Field::BigInt(3), Field::String("G".to_string()),
-                    Field::BigInt(2), Field::BigInt(1), Field::BigInt(3), Field::String("G".to_string()),
+                    Field::BigInt(2),
+                    Field::BigInt(1),
+                    Field::BigInt(3),
+                    Field::String("G".to_string()),
+                    Field::BigInt(2),
+                    Field::BigInt(1),
+                    Field::BigInt(3),
+                    Field::String("G".to_string()),
                 ])
             );
             assert_eq!(
                 t[2],
                 Tuple::new(vec![
-                    Field::BigInt(3), Field::BigInt(1), Field::BigInt(4), Field::String("A".to_string()),
-                    Field::BigInt(3), Field::BigInt(1), Field::BigInt(4), Field::String("A".to_string()),
+                    Field::BigInt(3),
+                    Field::BigInt(1),
+                    Field::BigInt(4),
+                    Field::String("A".to_string()),
+                    Field::BigInt(3),
+                    Field::BigInt(1),
+                    Field::BigInt(4),
+                    Field::String("A".to_string()),
                 ])
             );
             assert_eq!(
                 t[3],
                 Tuple::new(vec![
-                    Field::BigInt(3), Field::BigInt(1), Field::BigInt(4), Field::String("A".to_string()),
-                    Field::BigInt(4), Field::BigInt(2), Field::BigInt(4), Field::String("G".to_string()),
+                    Field::BigInt(3),
+                    Field::BigInt(1),
+                    Field::BigInt(4),
+                    Field::String("A".to_string()),
+                    Field::BigInt(4),
+                    Field::BigInt(2),
+                    Field::BigInt(4),
+                    Field::String("G".to_string()),
                 ])
             );
         }
