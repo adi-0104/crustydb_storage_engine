@@ -56,7 +56,6 @@ impl GraceHashJoin {
         left_child: Box<dyn OpIterator>,
         right_child: Box<dyn OpIterator>,
         num_partitions: Option<usize>,
-        tid: TransactionId,
     ) -> Self {
         Self {
             managers,
@@ -66,7 +65,7 @@ impl GraceHashJoin {
             left_child,
             right_child,
             num_partitions: num_partitions.unwrap_or(10),
-            tid,
+            tid: TransactionId::new(),
             open: false,
             left_partition_cids: Vec::new(),
             right_partition_cids: Vec::new(),
@@ -97,10 +96,7 @@ impl GraceHashJoin {
         ) {
             let t = Tuple::from_bytes(&bytes);
             let key = self.left_expr.eval(&t);
-            self.current_join_map
-                .entry(key)
-                .or_default()
-                .push(t);
+            self.current_join_map.entry(key).or_default().push(t);
         }
 
         // setup right partition iterator for probing
@@ -301,7 +297,6 @@ mod test {
                 setup.schema.clone(),
             )),
             Some(4),
-            TransactionId::new(),
         ));
         iter.configure(false);
         iter

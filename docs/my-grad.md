@@ -48,6 +48,12 @@ cargo test -p queryexe -- grace_hash_join
 
 The hardest part was `next()` — managing the state machine across partition rather than the right child iter that we exhausted in `open()` 
 
+## Whats Missing
+
+- Integration with planner.rs. Tried integrating it but i think the remove_container method needed to be implementd for the hs to manage the partitions.
+- also needed to implement a hash with a container ID that needs to be thread safe for e2e testing. 
+Will definitely try integrating and implementing the container management logic post finals week!
+
 ## References
 
 - Ramakrishnan & Gehrke, *Database Management Systems* Ch. 14 — External Hashing & Grace Hash Join
