@@ -1,114 +1,93 @@
-# CrustyDB — Relational Database Engine in Rust
+# CrustyDB
 
-A functional relational database built from scratch in Rust, developed as part of the **Database Systems** course (CMSC 23500) at the University of Chicago.
+A Rust-based relational database I built from scratch for the Database Systems course (CMSC 23500) at UChicago. The project was split across three milestones, each adding a new layer to the system.
 
-This isn't just a toy — CrustyDB runs real SQL queries. You can start a server, connect a client, create tables, import data, and run `SELECT`, `JOIN`, and `GROUP BY` queries end-to-end. Everything from the raw bytes on disk to the query result in your terminal was implemented from the ground up.
-
----
-
-## What I Built
-
-Most databases are black boxes — you type SQL and results appear. In this project, I built the internals layer by layer:
-
-### 1. Storage Engine — Pages & Heap Files
-At the lowest level, a database is just bytes on disk organized into **pages** (fixed-size chunks, like 4KB blocks). I implemented:
-- A **heap page** format with a slot directory that tracks which records live where, handles variable-length records, compacts free space when records are deleted, and iterates efficiently over stored tuples
-- A **heap file** built on top of pages — the actual file on disk where a table's data lives, supporting insert, delete, update, and full-table scans
-
-### 2. Buffer Pool
-Reading from disk is slow. Databases use a **buffer pool** — an in-memory cache of recently used pages. I implemented a buffer pool with:
-- A frame-based cache that holds hot pages in memory
-- An eviction policy to decide which pages to flush to disk when the cache is full
-- Statistics tracking for cache hit/miss rates
-
-### 3. Query Execution Engine
-Once data can be stored and retrieved, the database needs to *do something* with it. I implemented a set of **relational operators** that form a pipeline to execute SQL queries:
-
-| Operator | What it does |
-|---|---|
-| **Nested Loop Join** | Combines two tables by checking every pair of rows — simple but correct |
-| **Hash Join** | Faster join using a hash table — build a hash map on the smaller table, probe with the larger |
-| **Grace Hash Join** | Handles joins too large to fit in memory by partitioning both tables to disk first |
-| **Aggregate** | Computes `SUM`, `COUNT`, `AVG`, etc., with support for `GROUP BY` |
-
-These operators follow the **Volcano model** — each operator exposes a `next()` method, and results flow up the pipeline one tuple at a time, just like a real database.
+The base skeleton and course infrastructure were provided by the ChiData group at UChicago. All milestone implementations are my own.
 
 ---
 
-## Tech Stack
+## What I worked on
 
-- **Language:** Rust
-- **Architecture:** Multi-crate Cargo workspace
-- **Storage:** Custom heap file format (no external libraries)
-- **Query execution:** Volcano-style iterator model
-- **Interface:** SQL via a CLI client (psql-style commands)
+**Milestone 1 - Heap Page**
 
----
+Implemented the page layout for storing records on disk. A heap page holds fixed-size slots with a slot directory at one end and data growing from the other. Had to handle variable-length records, track free space, compact the page after deletes, and iterate over live tuples. Most of the work was in getting the byte offsets right and making sure the tests passed end to end.
 
-## Project Structure
+**Milestone 2 - Heapstore and Buffer Pool**
 
-```
-src/
-├── storage/
-│   ├── heapstore/     # Heap page, heap file, buffer pool
-│   └── memstore/      # In-memory storage (reference implementation)
-├── queryexe/          # Query operators: join, aggregate, scan
-├── optimizer/         # Query optimizer
-├── server/            # Server binary — connects everything together
-├── cli-crusty/        # Command-line client (like psql)
-├── common/            # Shared types, traits, error definitions
-└── txn_manager/       # Transaction manager
-```
+Built the heap file on top of pages - basically the file-backed storage layer for a table. Then implemented the buffer pool, which caches pages in memory to avoid hitting disk every time. The buffer pool uses frames and an eviction policy to decide which pages to flush when the cache is full.
+
+**Milestone 3 - Query Operators**
+
+Implemented the relational operators that actually execute SQL:
+- Nested Loop Join
+- Hash Join (build hash map on smaller table, probe with larger)
+- Grace Hash Join (partitions both tables to disk first, handles cases that don't fit in memory)
+- Aggregate with GROUP BY support
+
+These follow the Volcano model - each operator has an `open()`, `next()`, and `close()`, and results flow up the pipeline one tuple at a time.
 
 ---
 
-## Running It
+## Running it
 
-You need Rust 1.81+. Install or update via:
+You need Rust 1.81+:
 ```bash
 rustup update
 ```
 
-**Start the server:**
+Start the server:
 ```bash
 cargo run --bin server
 ```
 
-**Connect a client (in a separate terminal):**
+Connect a client (separate terminal):
 ```bash
 cargo run --bin cli-crusty
 ```
 
-**Try it out:**
+Basic flow:
 ```sql
--- Create a database and connect
-\r mydb
-\c mydb
-
--- Create a table
-CREATE TABLE employees (id INT, name TEXT, salary INT, primary key (id));
-
--- Import data from a CSV
-\i data.csv employees
-
--- Run queries
-SELECT name, salary FROM employees;
-SELECT SUM(salary) FROM employees;
+\r testdb
+\c testdb
+CREATE TABLE test (a INT, b INT, primary key (a));
+\i data.csv test
+SELECT a, b FROM test;
+SELECT sum(a), sum(b) FROM test;
 ```
 
-**Run the test suite:**
+Run tests:
 ```bash
 cargo test
+cargo test -p heapstore
 ```
 
 ---
 
-## Course Context
+## Project structure
 
-This was built as part of **MPCS / CMSC 23500 — Introduction to Database Systems** at the University of Chicago (Winter 2026). The project was structured as a series of milestones, each unlocking a new layer of the database:
+```
+src/
+├── storage/
+│   ├── heapstore/     # heap page, heap file, buffer pool
+│   └── memstore/      # in-memory reference implementation
+├── queryexe/          # query operators (join, aggregate, scan)
+├── optimizer/         # query optimizer
+├── server/            # server binary
+├── cli-crusty/        # psql-style CLI client
+└── common/            # shared types, traits, errors
+```
 
-1. **Milestone 1 — Heap Page:** Byte-level page layout, slot directory, compaction
-2. **Milestone 2 — Heapstore & Buffer Pool:** File-backed storage, in-memory page cache
-3. **Milestone 3 — Query Operators:** Joins (NLJ, Hash, Grace Hash) and aggregates
+---
 
-The base skeleton and course infrastructure were provided by the [ChiData group](https://cs.uchicago.edu/research/groups/chidata/) at UChicago. All milestone implementations are my own work.
+## What I learnt
+
+- Rust's ownership model made the buffer pool tricky - managing mutable references to frames while also maintaining a hash map over them required some restructuring.
+- The Grace Hash Join was the most complex to get right. Getting the partitioning and probing phases to work correctly without double-counting or missing tuples took a few iterations.
+- Working in a multi-crate workspace was new to me coming from Python. Understanding how `cargo build -p <crate>` and cross-crate dependencies work took a bit.
+- I got a much clearer picture of how a database actually works end to end - before this I mostly thought of it as a black box.
+
+## Possible improvements
+
+- The buffer pool eviction policy is basic. A proper LRU or clock algorithm would be worth implementing.
+- Grace Hash Join could be more efficient with better partition sizing to avoid overflow.
+- Haven't implemented transactions yet (txn_manager crate is mostly a stub).
