@@ -1,6 +1,6 @@
 # CrustyDB
 
-A Rust-based relational database I built from scratch for the Database Systems course (CMSC 23500) at UChicago. The project was split across three milestones, each adding a new layer to the system.
+A Rust-based relational database I built for the Database Systems course (CMSC 23500) at UChicago. The project was split across three milestones, each adding a new layer to the system.
 
 The base skeleton and course infrastructure were provided by the ChiData group at UChicago. All milestone implementations are my own.
 
