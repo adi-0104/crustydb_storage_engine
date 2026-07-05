@@ -81,13 +81,13 @@ src/
 
 ## What I learnt
 
-- Rust's ownership model made the buffer pool tricky - managing mutable references to frames while also maintaining a hash map over them required some restructuring.
-- The Grace Hash Join was the most complex to get right. Getting the partitioning and probing phases to work correctly without double-counting or missing tuples took a few iterations.
-- Working in a multi-crate workspace was new to me coming from Python. Understanding how `cargo build -p <crate>` and cross-crate dependencies work took a bit.
-- I got a much clearer picture of how a database actually works end to end - before this I mostly thought of it as a black box.
+- Rust's ownership model - managing mutable references to frames while also maintaining a hash map over them required some restructuring and thinking.
+- Grace Hash Join - Getting the partitioning and probing phases to work correctly without double-counting or missing tuples took a few iterations.
+- Working with crate workspace was new to me coming from Python.
+- I got a much clearer picture of how a database actually worked internally instead of treating it just as a blackbox
 
 ## Possible improvements
 
 - The buffer pool eviction policy is basic. A proper LRU or clock algorithm would be worth implementing.
 - Grace Hash Join could be more efficient with better partition sizing to avoid overflow.
-- Haven't implemented transactions yet (txn_manager crate is mostly a stub).
+- Implement transactions!
